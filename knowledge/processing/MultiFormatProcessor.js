@@ -584,6 +584,9 @@ class MultiFormatProcessor {
   /**
    * Extract PPTX content with graceful fallback
    */
+  /**
+   * Extract PPTX content with graceful fallback
+   */
   async extractPptxContent(filePath, options = {}) {
     if (!JSZip) {
       logger.warn('JSZip not available - returning PPTX fallback payload');
@@ -606,14 +609,14 @@ class MultiFormatProcessor {
         const text = this.extractTextFromPptxXml(slideXml);
 
         let notes;
-        const notesPath = ppt/notesSlides/notesSlide.xml;
+        const notesPath = `ppt/notesSlides/notesSlide${slideIndex}.xml`;
         const notesEntry = zip.files[notesPath];
         if (notesEntry) {
           try {
             const notesXml = await notesEntry.async('string');
             notes = this.extractTextFromPptxXml(notesXml) || undefined;
           } catch (notesError) {
-            logger.warn(Unable to extract notes for slide : );
+            logger.warn(`Unable to extract notes for slide ${slideIndex}: ${notesError.message}`);
           }
         }
 
@@ -628,9 +631,9 @@ class MultiFormatProcessor {
       const orderedSlides = slides.sort((a, b) => a.index - b.index);
       const combinedText = orderedSlides
         .map(slide => {
-          const segments = [Slide , slide.text || '(no visible text)'];
+          const segments = [`Slide ${slide.index}`, slide.text || '(no visible text)'];
           if (slide.notes) {
-            segments.push(Notes: );
+            segments.push(`Notes: ${slide.notes}`);
           }
           return segments.filter(Boolean).join('\n');
         })
@@ -685,6 +688,7 @@ class MultiFormatProcessor {
     return textRuns.join(' ').replace(/\s+/g, ' ').trim();
   }
 
+
   decodeXmlEntities(text) {
     if (!text) {
       return '';
@@ -695,10 +699,9 @@ class MultiFormatProcessor {
       .replace(/&lt;/g, '<')
       .replace(/&gt;/g, '>')
       .replace(/&quot;/g, '"')
-      .replace(/&apos;/g, "'")
-      .replace(/&#39;/g, "'");
+      .replace(/&apos;/g, ''')
+      .replace(/&#39;/g, ''')
   }
-
   async generatePptxFallbackResult(filePath, reason, error) {
     let stats;
     try {
@@ -982,7 +985,7 @@ class MultiFormatProcessor {
     text = text.replace(/&amp;/g, '&');
     text = text.replace(/&lt;/g, '<');
     text = text.replace(/&gt;/g, '>');
-    text = text.replace(/&quot;/g, '"');
+      .replace(/&quot;/g, '"')
     
     // Normalize whitespace
     text = text.replace(/\n\s*\n\s*\n/g, '\n\n');
@@ -1420,6 +1423,11 @@ class MultiFormatProcessor {
 }
 
 module.exports = MultiFormatProcessor;
+
+
+
+
+
 
 
 

@@ -18,7 +18,8 @@ api.txt
 keys/
 
 # Logs
-logs/
+logs/*
+!logs/.gitkeep
 *.log
 
 # Runtime data
@@ -67,7 +68,8 @@ temp/
 *.tmp
 
 # Backups
-backups/
+backups/*
+!backups/.gitkeep
 *.backup
 
 # OS generated files

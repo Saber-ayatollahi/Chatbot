@@ -1,0 +1,12 @@
+{
+  "versioningEnabled": true,
+  "maxVersionsToKeep": 10,
+  "autoBackupEnabled": true,
+  "changeDetectionEnabled": true,
+  "qualityCheckEnabled": true,
+  "similarityThreshold": 0.85,
+  "significantChangeThreshold": 0.3,
+  "minContentLength": 50,
+  "maxContentLength": 10000,
+  "lastUpdated": "2025-09-16T15:03:31.424Z"
+}

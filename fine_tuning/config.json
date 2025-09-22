@@ -1,0 +1,11 @@
+{
+  "baseModel": "gpt-3.5-turbo-1106",
+  "maxTrainingExamples": 10000,
+  "minTrainingExamples": 50,
+  "validationSplit": 0.2,
+  "maxTokensPerExample": 4096,
+  "trainingEpochs": 3,
+  "learningRateMultiplier": 0.1,
+  "batchSize": 1,
+  "promptLossWeight": 0.01
+}

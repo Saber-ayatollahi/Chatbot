@@ -1,0 +1,70 @@
+# Artillery Load Testing Configuration
+{
+  "config": {
+    "target": "http://localhost:5000",
+    "phases": [
+      {
+        "duration": 60,
+        "arrivalRate": 5,
+        "name": "Warm up"
+      },
+      {
+        "duration": 120,
+        "arrivalRate": 10,
+        "name": "Ramp up load"
+      },
+      {
+        "duration": 300,
+        "arrivalRate": 20,
+        "name": "Sustained load"
+      }
+    ],
+    "defaults": {
+      "headers": {
+        "Content-Type": "application/json"
+      }
+    }
+  },
+  "scenarios": [
+    {
+      "name": "Health Check",
+      "weight": 30,
+      "flow": [
+        {
+          "get": {
+            "url": "/api/chat/health"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Chat Query",
+      "weight": 50,
+      "flow": [
+        {
+          "post": {
+            "url": "/api/chat",
+            "json": {
+              "message": "What is the fund performance?",
+              "sessionId": "{{ $randomString() }}"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Document Upload",
+      "weight": 20,
+      "flow": [
+        {
+          "post": {
+            "url": "/api/documents/upload",
+            "formData": {
+              "file": "tests/fixtures/sample-document.pdf"
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

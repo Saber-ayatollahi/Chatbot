@@ -1,0 +1,655 @@
+# RAG System Evaluation Workflow
+# Comprehensive evaluation pipeline for quality assurance
+
+name: RAG System Evaluation
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+  schedule:
+    # Run nightly evaluation at 2 AM UTC
+    - cron: '0 2 * * *'
+  workflow_dispatch:
+    inputs:
+      evaluation_type:
+        description: 'Type of evaluation to run'
+        required: true
+        default: 'full'
+        type: choice
+        options:
+          - full
+          - regression
+          - performance
+          - ab_test
+      test_dataset:
+        description: 'Test dataset to use'
+        required: false
+        default: 'evaluation/golden_dataset.jsonl'
+      skip_quality_gates:
+        description: 'Skip quality gates (for testing)'
+        required: false
+        default: false
+        type: boolean
+
+env:
+  NODE_VERSION: '18'
+  POSTGRES_VERSION: '15'
+  
+jobs:
+  setup:
+    runs-on: ubuntu-latest
+    outputs:
+      evaluation-type: ${{ steps.config.outputs.evaluation-type }}
+      test-dataset: ${{ steps.config.outputs.test-dataset }}
+      skip-quality-gates: ${{ steps.config.outputs.skip-quality-gates }}
+    steps:
+      - name: Configure evaluation
+        id: config
+        run: |
+          echo "evaluation-type=${{ github.event.inputs.evaluation_type || 'regression' }}" >> $GITHUB_OUTPUT
+          echo "test-dataset=${{ github.event.inputs.test_dataset || 'evaluation/golden_dataset.jsonl' }}" >> $GITHUB_OUTPUT
+          echo "skip-quality-gates=${{ github.event.inputs.skip_quality_gates || 'false' }}" >> $GITHUB_OUTPUT
+
+  build-and-test:
+    runs-on: ubuntu-latest
+    needs: setup
+    
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: fund_chatbot_test
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          
+      - name: Install dependencies
+        run: |
+          npm ci
+          cd client && npm ci
+          
+      - name: Setup test environment
+        run: |
+          # Install pgvector extension
+          sudo apt-get update
+          sudo apt-get install -y postgresql-15-pgvector
+          
+          # Create test environment file
+          cat > .env.test << EOF
+          NODE_ENV=test
+          DATABASE_URL=postgresql://postgres:postgres@localhost:5432/fund_chatbot_test
+          OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}
+          OPENAI_EMBEDDING_MODEL=text-embedding-3-large
+          OPENAI_CHAT_MODEL=gpt-4
+          VECTOR_DIMENSION=1536
+          SIMILARITY_THRESHOLD=0.7
+          MAX_RETRIEVED_CHUNKS=5
+          LOG_LEVEL=error
+          EOF
+          
+      - name: Initialize test database
+        run: |
+          export $(cat .env.test | xargs)
+          node scripts/initializeDatabase.js
+          
+      - name: Run unit tests
+        run: |
+          export $(cat .env.test | xargs)
+          npm test -- --coverage --watchAll=false
+          
+      - name: Run integration tests
+        run: |
+          export $(cat .env.test | xargs)
+          npm run test:integration
+          
+      - name: Upload test coverage
+        uses: codecov/codecov-action@v3
+        with:
+          file: ./coverage/lcov.info
+          flags: unittests
+          name: codecov-umbrella
+
+  regression-testing:
+    runs-on: ubuntu-latest
+    needs: [setup, build-and-test]
+    if: contains(fromJSON('["full", "regression"]'), needs.setup.outputs.evaluation-type)
+    
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: fund_chatbot_eval
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          
+      - name: Install dependencies
+        run: npm ci
+        
+      - name: Setup evaluation environment
+        run: |
+          # Install pgvector extension
+          sudo apt-get update
+          sudo apt-get install -y postgresql-15-pgvector
+          
+          # Create evaluation environment file
+          cat > .env.eval << EOF
+          NODE_ENV=evaluation
+          DATABASE_URL=postgresql://postgres:postgres@localhost:5432/fund_chatbot_eval
+          OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}
+          OPENAI_EMBEDDING_MODEL=text-embedding-3-large
+          OPENAI_CHAT_MODEL=gpt-4
+          VECTOR_DIMENSION=1536
+          SIMILARITY_THRESHOLD=0.7
+          MAX_RETRIEVED_CHUNKS=5
+          LOG_LEVEL=info
+          EOF
+          
+      - name: Initialize evaluation database
+        run: |
+          export $(cat .env.eval | xargs)
+          node scripts/initializeDatabase.js
+          
+      - name: Ingest test documents
+        run: |
+          export $(cat .env.eval | xargs)
+          node scripts/ingestDocuments.js Fund_Manager_User_Guide_1.9.pdf Fund_Manager_User_Guide_v_1.9_MA_format.pdf
+          
+      - name: Generate golden dataset
+        run: |
+          export $(cat .env.eval | xargs)
+          node scripts/generateGoldenDataset.js
+          
+      - name: Run regression tests
+        id: regression
+        run: |
+          export $(cat .env.eval | xargs)
+          node scripts/runRegressionTests.js ${{ needs.setup.outputs.test-dataset }} > regression_results.json
+          
+          # Extract key metrics
+          ACCURACY=$(cat regression_results.json | jq -r '.metrics.accuracy')
+          CITATION_PRECISION=$(cat regression_results.json | jq -r '.metrics.citationPrecision')
+          CITATION_RECALL=$(cat regression_results.json | jq -r '.metrics.citationRecall')
+          PASS_RATE=$(cat regression_results.json | jq -r '.report.summary.passRate')
+          AVG_RESPONSE_TIME=$(cat regression_results.json | jq -r '.metrics.averageResponseTime')
+          
+          echo "accuracy=$ACCURACY" >> $GITHUB_OUTPUT
+          echo "citation-precision=$CITATION_PRECISION" >> $GITHUB_OUTPUT
+          echo "citation-recall=$CITATION_RECALL" >> $GITHUB_OUTPUT
+          echo "pass-rate=$PASS_RATE" >> $GITHUB_OUTPUT
+          echo "avg-response-time=$AVG_RESPONSE_TIME" >> $GITHUB_OUTPUT
+          
+          # Save results as artifact
+          echo "Regression test results:" > regression_summary.txt
+          echo "Accuracy: $(echo "$ACCURACY * 100" | bc -l | cut -d. -f1)%" >> regression_summary.txt
+          echo "Citation Precision: $(echo "$CITATION_PRECISION * 100" | bc -l | cut -d. -f1)%" >> regression_summary.txt
+          echo "Citation Recall: $(echo "$CITATION_RECALL * 100" | bc -l | cut -d. -f1)%" >> regression_summary.txt
+          echo "Pass Rate: $(echo "$PASS_RATE * 100" | bc -l | cut -d. -f1)%" >> regression_summary.txt
+          echo "Avg Response Time: ${AVG_RESPONSE_TIME}ms" >> regression_summary.txt
+          
+      - name: Upload regression results
+        uses: actions/upload-artifact@v4
+        with:
+          name: regression-test-results
+          path: |
+            regression_results.json
+            regression_summary.txt
+            
+      - name: Quality Gate - Accuracy
+        if: needs.setup.outputs.skip-quality-gates != 'true'
+        run: |
+          ACCURACY=${{ steps.regression.outputs.accuracy }}
+          THRESHOLD=0.85
+          if (( $(echo "$ACCURACY < $THRESHOLD" | bc -l) )); then
+            echo "❌ Quality Gate Failed: Accuracy $ACCURACY < $THRESHOLD"
+            exit 1
+          else
+            echo "✅ Quality Gate Passed: Accuracy $ACCURACY >= $THRESHOLD"
+          fi
+          
+      - name: Quality Gate - Citation Precision
+        if: needs.setup.outputs.skip-quality-gates != 'true'
+        run: |
+          PRECISION=${{ steps.regression.outputs.citation-precision }}
+          THRESHOLD=0.90
+          if (( $(echo "$PRECISION < $THRESHOLD" | bc -l) )); then
+            echo "❌ Quality Gate Failed: Citation Precision $PRECISION < $THRESHOLD"
+            exit 1
+          else
+            echo "✅ Quality Gate Passed: Citation Precision $PRECISION >= $THRESHOLD"
+          fi
+          
+      - name: Quality Gate - Response Time
+        if: needs.setup.outputs.skip-quality-gates != 'true'
+        run: |
+          RESPONSE_TIME=${{ steps.regression.outputs.avg-response-time }}
+          THRESHOLD=5000
+          if (( $(echo "$RESPONSE_TIME > $THRESHOLD" | bc -l) )); then
+            echo "❌ Quality Gate Failed: Avg Response Time ${RESPONSE_TIME}ms > ${THRESHOLD}ms"
+            exit 1
+          else
+            echo "✅ Quality Gate Passed: Avg Response Time ${RESPONSE_TIME}ms <= ${THRESHOLD}ms"
+          fi
+
+  performance-testing:
+    runs-on: ubuntu-latest
+    needs: [setup, build-and-test]
+    if: contains(fromJSON('["full", "performance"]'), needs.setup.outputs.evaluation-type)
+    
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: fund_chatbot_perf
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          
+      - name: Install dependencies
+        run: npm ci
+        
+      - name: Setup performance environment
+        run: |
+          # Install pgvector extension
+          sudo apt-get update
+          sudo apt-get install -y postgresql-15-pgvector
+          
+          # Create performance environment file
+          cat > .env.perf << EOF
+          NODE_ENV=performance
+          DATABASE_URL=postgresql://postgres:postgres@localhost:5432/fund_chatbot_perf
+          OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}
+          OPENAI_EMBEDDING_MODEL=text-embedding-3-large
+          OPENAI_CHAT_MODEL=gpt-4
+          VECTOR_DIMENSION=1536
+          SIMILARITY_THRESHOLD=0.7
+          MAX_RETRIEVED_CHUNKS=5
+          LOG_LEVEL=warn
+          EOF
+          
+      - name: Initialize performance database
+        run: |
+          export $(cat .env.perf | xargs)
+          node scripts/initializeDatabase.js
+          
+      - name: Ingest test documents
+        run: |
+          export $(cat .env.perf | xargs)
+          node scripts/ingestDocuments.js Fund_Manager_User_Guide_1.9.pdf Fund_Manager_User_Guide_v_1.9_MA_format.pdf
+          
+      - name: Run performance benchmarks
+        id: performance
+        run: |
+          export $(cat .env.perf | xargs)
+          node scripts/runPerformanceBenchmarks.js > performance_results.json
+          
+          # Extract key metrics
+          P95_RESPONSE_TIME=$(cat performance_results.json | jq -r '.analysis.performance.p95ResponseTime')
+          THROUGHPUT=$(cat performance_results.json | jq -r '.analysis.performance.throughput')
+          ERROR_RATE=$(cat performance_results.json | jq -r '.analysis.reliability.overallErrorRate')
+          
+          echo "p95-response-time=$P95_RESPONSE_TIME" >> $GITHUB_OUTPUT
+          echo "throughput=$THROUGHPUT" >> $GITHUB_OUTPUT
+          echo "error-rate=$ERROR_RATE" >> $GITHUB_OUTPUT
+          
+          # Save results summary
+          echo "Performance test results:" > performance_summary.txt
+          echo "95th Percentile Response Time: ${P95_RESPONSE_TIME}ms" >> performance_summary.txt
+          echo "Throughput: ${THROUGHPUT} RPS" >> performance_summary.txt
+          echo "Error Rate: $(echo "$ERROR_RATE * 100" | bc -l | cut -d. -f1)%" >> performance_summary.txt
+          
+      - name: Upload performance results
+        uses: actions/upload-artifact@v4
+        with:
+          name: performance-test-results
+          path: |
+            performance_results.json
+            performance_summary.txt
+            
+      - name: Quality Gate - P95 Response Time
+        if: needs.setup.outputs.skip-quality-gates != 'true'
+        run: |
+          P95_TIME=${{ steps.performance.outputs.p95-response-time }}
+          THRESHOLD=3000
+          if (( $(echo "$P95_TIME > $THRESHOLD" | bc -l) )); then
+            echo "❌ Quality Gate Failed: P95 Response Time ${P95_TIME}ms > ${THRESHOLD}ms"
+            exit 1
+          else
+            echo "✅ Quality Gate Passed: P95 Response Time ${P95_TIME}ms <= ${THRESHOLD}ms"
+          fi
+          
+      - name: Quality Gate - Error Rate
+        if: needs.setup.outputs.skip-quality-gates != 'true'
+        run: |
+          ERROR_RATE=${{ steps.performance.outputs.error-rate }}
+          THRESHOLD=0.05
+          if (( $(echo "$ERROR_RATE > $THRESHOLD" | bc -l) )); then
+            echo "❌ Quality Gate Failed: Error Rate $ERROR_RATE > $THRESHOLD"
+            exit 1
+          else
+            echo "✅ Quality Gate Passed: Error Rate $ERROR_RATE <= $THRESHOLD"
+          fi
+
+  ab-testing:
+    runs-on: ubuntu-latest
+    needs: [setup, build-and-test]
+    if: contains(fromJSON('["full", "ab_test"]'), needs.setup.outputs.evaluation-type)
+    
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: fund_chatbot_ab
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          
+      - name: Install dependencies
+        run: npm ci
+        
+      - name: Setup A/B test environment
+        run: |
+          # Install pgvector extension
+          sudo apt-get update
+          sudo apt-get install -y postgresql-15-pgvector
+          
+          # Create A/B test environment file
+          cat > .env.ab << EOF
+          NODE_ENV=ab_testing
+          DATABASE_URL=postgresql://postgres:postgres@localhost:5432/fund_chatbot_ab
+          OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}
+          OPENAI_EMBEDDING_MODEL=text-embedding-3-large
+          OPENAI_CHAT_MODEL=gpt-4
+          VECTOR_DIMENSION=1536
+          SIMILARITY_THRESHOLD=0.7
+          MAX_RETRIEVED_CHUNKS=5
+          LOG_LEVEL=warn
+          EOF
+          
+      - name: Initialize A/B test database
+        run: |
+          export $(cat .env.ab | xargs)
+          node scripts/initializeDatabase.js
+          
+      - name: Ingest test documents
+        run: |
+          export $(cat .env.ab | xargs)
+          node scripts/ingestDocuments.js Fund_Manager_User_Guide_1.9.pdf Fund_Manager_User_Guide_v_1.9_MA_format.pdf
+          
+      - name: Run A/B tests
+        id: ab_test
+        run: |
+          export $(cat .env.ab | xargs)
+          node scripts/runABTests.js > ab_test_results.json
+          
+          # Extract key metrics
+          BEST_VARIANT=$(cat ab_test_results.json | jq -r '.analysis.summary.bestVariant.name')
+          BEST_ACCURACY=$(cat ab_test_results.json | jq -r '.analysis.summary.bestVariant.accuracy')
+          SIGNIFICANT_RESULTS=$(cat ab_test_results.json | jq -r '.analysis.statisticalSignificance.tests | map(select(.isSignificant)) | length')
+          
+          echo "best-variant=$BEST_VARIANT" >> $GITHUB_OUTPUT
+          echo "best-accuracy=$BEST_ACCURACY" >> $GITHUB_OUTPUT
+          echo "significant-results=$SIGNIFICANT_RESULTS" >> $GITHUB_OUTPUT
+          
+          # Save results summary
+          echo "A/B test results:" > ab_test_summary.txt
+          echo "Best Variant: $BEST_VARIANT" >> ab_test_summary.txt
+          echo "Best Accuracy: $(echo "$BEST_ACCURACY * 100" | bc -l | cut -d. -f1)%" >> ab_test_summary.txt
+          echo "Statistically Significant Results: $SIGNIFICANT_RESULTS" >> ab_test_summary.txt
+          
+      - name: Upload A/B test results
+        uses: actions/upload-artifact@v4
+        with:
+          name: ab-test-results
+          path: |
+            ab_test_results.json
+            ab_test_summary.txt
+
+  security-scan:
+    runs-on: ubuntu-latest
+    needs: build-and-test
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          
+      - name: Install dependencies
+        run: npm ci
+        
+      - name: Run security audit
+        run: |
+          npm audit --audit-level high
+          cd client && npm audit --audit-level high
+          
+      - name: Run dependency check
+        uses: dependency-check/Dependency-Check_Action@main
+        with:
+          project: 'fund-management-chatbot'
+          path: '.'
+          format: 'JSON'
+          
+      - name: Upload security results
+        uses: actions/upload-artifact@v4
+        with:
+          name: security-scan-results
+          path: reports/
+
+  generate-report:
+    runs-on: ubuntu-latest
+    needs: [regression-testing, performance-testing, ab-testing, security-scan]
+    if: always()
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        
+      - name: Generate comprehensive report
+        run: |
+          mkdir -p evaluation_report
+          
+          # Create HTML report
+          cat > evaluation_report/index.html << 'EOF'
+          <!DOCTYPE html>
+          <html>
+          <head>
+              <title>RAG System Evaluation Report</title>
+              <style>
+                  body { font-family: Arial, sans-serif; margin: 40px; }
+                  .header { background: #f4f4f4; padding: 20px; border-radius: 8px; }
+                  .section { margin: 20px 0; padding: 15px; border-left: 4px solid #007cba; }
+                  .metric { display: inline-block; margin: 10px; padding: 10px; background: #f9f9f9; border-radius: 4px; }
+                  .pass { color: green; } .fail { color: red; } .warning { color: orange; }
+                  table { width: 100%; border-collapse: collapse; margin: 15px 0; }
+                  th, td { padding: 12px; text-align: left; border-bottom: 1px solid #ddd; }
+                  th { background-color: #f2f2f2; }
+              </style>
+          </head>
+          <body>
+              <div class="header">
+                  <h1>🧪 RAG System Evaluation Report</h1>
+                  <p><strong>Generated:</strong> $(date)</p>
+                  <p><strong>Commit:</strong> ${{ github.sha }}</p>
+                  <p><strong>Branch:</strong> ${{ github.ref_name }}</p>
+              </div>
+          EOF
+          
+          # Add regression results if available
+          if [ -f "regression-test-results/regression_summary.txt" ]; then
+              echo '<div class="section"><h2>📊 Regression Testing</h2>' >> evaluation_report/index.html
+              echo '<pre>' >> evaluation_report/index.html
+              cat regression-test-results/regression_summary.txt >> evaluation_report/index.html
+              echo '</pre></div>' >> evaluation_report/index.html
+          fi
+          
+          # Add performance results if available
+          if [ -f "performance-test-results/performance_summary.txt" ]; then
+              echo '<div class="section"><h2>🏃‍♂️ Performance Testing</h2>' >> evaluation_report/index.html
+              echo '<pre>' >> evaluation_report/index.html
+              cat performance-test-results/performance_summary.txt >> evaluation_report/index.html
+              echo '</pre></div>' >> evaluation_report/index.html
+          fi
+          
+          # Add A/B test results if available
+          if [ -f "ab-test-results/ab_test_summary.txt" ]; then
+              echo '<div class="section"><h2>🧪 A/B Testing</h2>' >> evaluation_report/index.html
+              echo '<pre>' >> evaluation_report/index.html
+              cat ab-test-results/ab_test_summary.txt >> evaluation_report/index.html
+              echo '</pre></div>' >> evaluation_report/index.html
+          fi
+          
+          # Close HTML
+          echo '</body></html>' >> evaluation_report/index.html
+          
+      - name: Upload evaluation report
+        uses: actions/upload-artifact@v4
+        with:
+          name: evaluation-report
+          path: evaluation_report/
+          
+      - name: Comment on PR
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            
+            let comment = '## 🧪 RAG System Evaluation Results\n\n';
+            comment += `**Commit:** ${context.sha.substring(0, 7)}\n`;
+            comment += `**Evaluation Type:** ${{ needs.setup.outputs.evaluation-type }}\n\n`;
+            
+            // Add regression results if available
+            try {
+              const regressionSummary = fs.readFileSync('regression-test-results/regression_summary.txt', 'utf8');
+              comment += '### 📊 Regression Testing\n```\n' + regressionSummary + '\n```\n\n';
+            } catch (e) {
+              comment += '### 📊 Regression Testing\n*No regression test results available*\n\n';
+            }
+            
+            // Add performance results if available
+            try {
+              const performanceSummary = fs.readFileSync('performance-test-results/performance_summary.txt', 'utf8');
+              comment += '### 🏃‍♂️ Performance Testing\n```\n' + performanceSummary + '\n```\n\n';
+            } catch (e) {
+              comment += '### 🏃‍♂️ Performance Testing\n*No performance test results available*\n\n';
+            }
+            
+            comment += '📊 [View Full Report](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})';
+            
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: comment
+            });
+
+  notify-slack:
+    runs-on: ubuntu-latest
+    needs: [regression-testing, performance-testing, ab-testing]
+    if: always() && github.ref == 'refs/heads/main'
+    
+    steps:
+      - name: Notify Slack
+        if: env.SLACK_WEBHOOK_URL != ''
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+        run: |
+          STATUS="✅ Passed"
+          COLOR="good"
+          
+          if [[ "${{ needs.regression-testing.result }}" == "failure" ]] || 
+             [[ "${{ needs.performance-testing.result }}" == "failure" ]] || 
+             [[ "${{ needs.ab-testing.result }}" == "failure" ]]; then
+            STATUS="❌ Failed"
+            COLOR="danger"
+          fi
+          
+          curl -X POST -H 'Content-type: application/json' \
+            --data "{
+              \"attachments\": [{
+                \"color\": \"$COLOR\",
+                \"title\": \"RAG System Evaluation $STATUS\",
+                \"fields\": [
+                  {\"title\": \"Repository\", \"value\": \"${{ github.repository }}\", \"short\": true},
+                  {\"title\": \"Branch\", \"value\": \"${{ github.ref_name }}\", \"short\": true},
+                  {\"title\": \"Commit\", \"value\": \"${{ github.sha }}\", \"short\": true},
+                  {\"title\": \"Evaluation Type\", \"value\": \"${{ needs.setup.outputs.evaluation-type }}\", \"short\": true}
+                ],
+                \"actions\": [{
+                  \"type\": \"button\",
+                  \"text\": \"View Results\",
+                  \"url\": \"https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}\"
+                }]
+              }]
+            }" \
+            $SLACK_WEBHOOK_URL

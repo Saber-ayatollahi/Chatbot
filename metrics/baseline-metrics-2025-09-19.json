@@ -1,0 +1,102 @@
+{
+  "timestamp": "2025-09-19T02:31:10.542Z",
+  "system": {
+    "nodeVersion": "v24.4.1",
+    "platform": "win32",
+    "arch": "x64",
+    "cpuCores": 20,
+    "totalMemory": 34014814208,
+    "freeMemory": 3510915072,
+    "memoryUsage": {
+      "rss": 58961920,
+      "heapTotal": 13598720,
+      "heapUsed": 10544488,
+      "external": 1999083
+    },
+    "cpuUsage": {
+      "user": 15000,
+      "system": 0
+    },
+    "diskUsage": {
+      "size": 0,
+      "accessed": "2025-09-19T02:31:10.540Z",
+      "modified": "2025-09-19T02:29:51.498Z"
+    },
+    "collectionTime": 1.1638999999999555
+  },
+  "performance": {
+    "documentProcessing": {
+      "averageTime": 531.564775,
+      "minTime": 466.61709999999994,
+      "maxTime": 609.6477,
+      "averageChunks": 36,
+      "averageQuality": 0.7142069437317821,
+      "documentsProcessed": 4,
+      "totalTime": 2126.2591
+    },
+    "retrieval": {
+      "averageTime": 263.7751,
+      "minTime": 185.0610999999999,
+      "maxTime": 324.3224,
+      "averageResults": 7.4,
+      "averageRelevance": 0.7295276300287423,
+      "queriesProcessed": 5,
+      "totalTime": 1318.8755
+    },
+    "embedding": {
+      "averageTime": 242.84956000000003,
+      "minTime": 157.33049999999957,
+      "maxTime": 310.22829999999976,
+      "averageDimension": 3072,
+      "embeddingsGenerated": 5,
+      "totalTime": 1214.2478
+    },
+    "database": {
+      "simpleQueryTime": 0,
+      "complexQueryTime": 0,
+      "vectorQueryTime": 0,
+      "connectionTime": 0,
+      "error": "Cannot read properties of null (reading 'connect')"
+    },
+    "api": {
+      "GET /api/chat/health": {
+        "responseTime": 78.0664999999999,
+        "statusCode": 200,
+        "success": true
+      },
+      "POST /api/documents/upload": {
+        "responseTime": 77.97959999999966,
+        "statusCode": 200,
+        "success": true
+      },
+      "POST /api/chat": {
+        "responseTime": 141.0589,
+        "statusCode": 200,
+        "success": true
+      }
+    }
+  },
+  "quality": {
+    "contextQuality": 65,
+    "retrievalPrecision": 72,
+    "semanticCoherence": 58,
+    "structurePreservation": 45,
+    "crossReferenceAccuracy": 32,
+    "chunkQuality": 60,
+    "embeddingConsistency": 70,
+    "retrievalRecall": 68,
+    "responseCompleteness": 55,
+    "informationAccuracy": 75
+  },
+  "business": {
+    "userSatisfaction": 75,
+    "queryResolutionRate": 68,
+    "responseAccuracy": 70,
+    "supportTickets": 100,
+    "averageSessionDuration": 8.5,
+    "userRetentionRate": 82,
+    "systemUptime": 99.5,
+    "costPerQuery": 0.15,
+    "processingThroughput": 150
+  }
+}

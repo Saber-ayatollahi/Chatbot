@@ -1,0 +1,30 @@
+
+{
+  "sampleDocument": {
+    "id": "test-doc-1",
+    "name": "sample.pdf",
+    "content": "This is a sample document for testing purposes.",
+    "metadata": {
+      "pages": 1,
+      "size": 1024,
+      "type": "pdf"
+    }
+  },
+  "sampleChunks": [
+    {
+      "id": "chunk-1",
+      "content": "First chunk of sample content.",
+      "metadata": { "page": 1, "position": 0 }
+    },
+    {
+      "id": "chunk-2", 
+      "content": "Second chunk of sample content.",
+      "metadata": { "page": 1, "position": 1 }
+    }
+  ],
+  "sampleQueries": [
+    "What is this document about?",
+    "Summarize the main points",
+    "What are the key findings?"
+  ]
+}

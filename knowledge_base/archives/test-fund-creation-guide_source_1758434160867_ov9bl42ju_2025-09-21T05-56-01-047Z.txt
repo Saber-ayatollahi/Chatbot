@@ -1,0 +1,57 @@
+# Fund Creation Guide - Test Document
+
+## Introduction
+This is a comprehensive guide on how to create a fund in the Fund Manager system.
+
+## Step-by-Step Fund Creation Process
+
+### Step 1: Initial Setup
+To create a new fund, you must first access the Fund Manager interface and navigate to the "Create New Fund" section.
+
+### Step 2: Fund Configuration
+Configure the following parameters:
+- Fund name and identifier
+- Investment strategy
+- Risk profile
+- Initial capital requirements
+- Management fees structure
+
+### Step 3: Regulatory Compliance
+Ensure all regulatory requirements are met:
+- SEC registration (if applicable)
+- Investment advisor registration
+- Compliance documentation
+- Risk disclosure statements
+
+### Step 4: Portfolio Setup
+Define the initial portfolio structure:
+- Asset allocation strategy
+- Investment universe
+- Benchmark selection
+- Performance measurement criteria
+
+### Step 5: Operational Framework
+Establish operational procedures:
+- Trade settlement processes
+- Reporting requirements
+- Investor communications
+- Performance monitoring
+
+## Advanced Fund Creation Features
+
+### Leveraged Funds
+For creating leveraged funds, the system supports:
+- Long/short strategies
+- Derivative instruments
+- Margin requirements
+- Risk management controls
+
+### Multi-Asset Funds
+The platform enables creation of:
+- Mixed asset portfolios
+- Alternative investments
+- Real estate allocations
+- Commodity exposures
+
+## Conclusion
+Following these steps ensures proper fund creation with all necessary compliance and operational frameworks in place.

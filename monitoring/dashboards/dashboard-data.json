@@ -1,0 +1,149 @@
+{
+  "systemHealth": {
+    "overall": "healthy",
+    "components": {
+      "database": {
+        "status": "healthy",
+        "responseTime": 2,
+        "details": {
+          "queryTime": 2,
+          "conversationCount": 7,
+          "poolStatus": {
+            "totalConnections": 0,
+            "idleConnections": 0,
+            "waitingClients": 0
+          },
+          "status": "healthy"
+        }
+      },
+      "api": {
+        "status": "healthy",
+        "responseTime": 189,
+        "details": {
+          "/api/chat/health": {
+            "status": "healthy",
+            "responseTime": 95
+          },
+          "/api/documents": {
+            "status": "healthy",
+            "responseTime": 94
+          }
+        }
+      },
+      "openai": {
+        "status": "healthy",
+        "responseTime": 218,
+        "details": {
+          "status": "healthy",
+          "responseTime": 218,
+          "apiVersion": "v1",
+          "model": "text-embedding-3-large"
+        }
+      },
+      "filesystem": {
+        "status": "healthy",
+        "responseTime": 1,
+        "details": {
+          "./logs": {
+            "exists": true,
+            "isDirectory": true,
+            "size": 0,
+            "modified": "2025-09-19T02:34:38.135Z"
+          },
+          "./backups": {
+            "exists": true,
+            "isDirectory": true,
+            "size": 0,
+            "modified": "2025-09-16T14:23:34.110Z"
+          },
+          "./knowledge_base": {
+            "exists": true,
+            "isDirectory": true,
+            "size": 0,
+            "modified": "2025-09-16T15:03:31.424Z"
+          }
+        }
+      },
+      "memory": {
+        "status": "healthy",
+        "responseTime": 0,
+        "details": {
+          "status": "healthy",
+          "rss": 61,
+          "heapUsed": 11,
+          "heapTotal": 19,
+          "external": 2,
+          "totalMB": 74
+        }
+      },
+      "cpu": {
+        "status": "healthy",
+        "responseTime": 0,
+        "details": {
+          "status": "healthy",
+          "userPercent": 1.41,
+          "systemPercent": 1.41,
+          "totalPercent": 2.82,
+          "uptime": 1
+        }
+      }
+    },
+    "lastUpdate": "2025-09-19T03:52:17.797Z",
+    "totalCheckTime": 420
+  },
+  "performance": {
+    "metrics": {
+      "response_time": {
+        "value": 503.39,
+        "unit": "ms",
+        "status": "good",
+        "collectionTime": 0,
+        "metadata": {}
+      },
+      "throughput": {
+        "value": 69.53,
+        "unit": "req/sec",
+        "status": "good",
+        "collectionTime": 0,
+        "metadata": {}
+      },
+      "error_rate": {
+        "value": 2.513,
+        "unit": "%",
+        "status": "degraded",
+        "collectionTime": 0,
+        "metadata": {}
+      },
+      "quality_score": {
+        "value": 0.975,
+        "unit": "score",
+        "status": "good",
+        "collectionTime": 0,
+        "metadata": {}
+      },
+      "processing_time": {
+        "value": 2985.78,
+        "unit": "ms",
+        "status": "good",
+        "collectionTime": 0,
+        "metadata": {}
+      },
+      "queue_depth": {
+        "value": 3,
+        "unit": "items",
+        "status": "good",
+        "collectionTime": 0,
+        "metadata": {}
+      }
+    },
+    "overall": "degraded",
+    "lastUpdate": "2025-09-19T03:52:17.804Z",
+    "totalCheckTime": 6
+  },
+  "alerts": {
+    "active": 0,
+    "resolved": 0,
+    "escalated": 0,
+    "lastUpdate": "2025-09-19T03:52:17.810Z"
+  }
+}

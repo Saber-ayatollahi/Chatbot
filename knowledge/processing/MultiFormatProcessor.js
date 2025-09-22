@@ -581,158 +581,159 @@ class MultiFormatProcessor {
 /**
  * Extract PPTX content with graceful fallback
  */
-  async extractPptxContent(filePath, options = {}) {
-  if (!JSZip) {
-    logger.warn('JSZip not available - returning PPTX fallback payload');
-    return await this.generatePptxFallbackResult(filePath, 'jszip_module_missing');
-  }
-  
-  try {
-    const fileBuffer = await fs.readFile(filePath);
-    const zip = await JSZip.loadAsync(fileBuffer);
-    const slideEntries = Object.keys(zip.files)
-      .filter(name => /^ppt\/slides\/slide\d+\.xml$/i.test(name))
-      .sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
-  
-    const slides = [];
-  
-    for (const slidePath of slideEntries) {
-      const slideXml = await zip.files[slidePath].async('string');
-      const slideIndexMatch = slidePath.match(/slide(\d+)\.xml$/i);
-      const slideIndex = slideIndexMatch ? parseInt(slideIndexMatch[1], 10) : slides.length + 1;
-      const text = this.extractTextFromPptxXml(slideXml);
-  
-      let notes;
-      const notesPath = `ppt/notesSlides/notesSlide${slideIndex}.xml`;
-      const notesEntry = zip.files[notesPath];
-      if (notesEntry) {
-        try {
-          const notesXml = await notesEntry.async('string');
-          notes = this.extractTextFromPptxXml(notesXml) || undefined;
-        } catch (notesError) {
-          logger.warn(`Unable to extract notes for slide ${slideIndex}: ${notesError.message}`);
-        }
-      }
-  
-      slides.push({
-        index: slideIndex,
-        id: slidePath,
-        text,
-        notes
-      });
-    }
-  
-    const orderedSlides = slides.sort((a, b) => a.index - b.index);
-    const combinedText = orderedSlides
-      .map(slide => {
-        const segments = [`Slide ${slide.index}`, slide.text || '(no visible text)'];
-        if (slide.notes) {
-          segments.push(`Notes: ${slide.notes}`);
-        }
-        return segments.filter(Boolean).join('\n');
-      })
-      .join('\n\n');
-  
-    return {
-      text: combinedText,
-      slides: orderedSlides,
-      structure: {
-        hasStructure: true,
-        slideCount: orderedSlides.length,
-        hasNotes: orderedSlides.some(slide => Boolean(slide.notes)),
-        slideOrder: orderedSlides.map(slide => slide.index)
-      },
-      metadata: {
-        parser: 'jszip_extractor',
-        slideCount: orderedSlides.length,
-        fallback: false,
-        extractedAt: new Date().toISOString()
-      }
-    };
-  } catch (error) {
-    logger.warn('Built-in PPTX extraction failed:', error.message);
-    return await this.generatePptxFallbackResult(filePath, 'jszip_extraction_failed', error);
-  }
-  }
-  
-  extractTextFromPptxXml(xml) {
-  if (!xml) {
-    return '';
-  }
-  
-  const normalizedXml = xml.replace(/<a:br\s*\/>/gi, '\n');
-  const textRuns = [];
-  const regex = /<a:t[^>]*>(.*?)<\/a:t>/gims;
-  let match;
-  
-  while ((match = regex.exec(normalizedXml)) !== null) {
-    const value = this.decodeXmlEntities(match[1]).replace(/\s+/g, ' ').trim();
-    if (value) {
-      textRuns.push(value);
-    }
-  }
-  
-  if (textRuns.length === 0) {
-    const stripped = this.decodeXmlEntities(
-      normalizedXml.replace(/<[^>]+>/g, ' ')
-    ).replace(/\s+/g, ' ').trim();
-    return stripped;
-  }
-  
-  return textRuns.join(' ').replace(/\s+/g, ' ').trim();
-  }
-  
-  decodeXmlEntities(text) {
-  if (!text) {
-    return '';
-  }
-  
-  return text
-    .replace(/&amp;/g, '&')
-    .replace(/&lt;/g, '<')
-    .replace(/&gt;/g, '>')
-    .replace(/&quot;/g, '"')
-    .replace(/&apos;/g, "'")
-    .replace(/&#39;/g, "'");
-  }
-  
-  async generatePptxFallbackResult(filePath, reason, error) {
-  let stats;
-  try {
-    stats = await fs.stat(filePath);
-  } catch (statError) {
-    stats = null;
-  }
-  
-  const metadata = {
-    parser: 'pptx_fallback',
-    fallback: true,
-    reason,
-    fileName: path.basename(filePath)
-  };
-  
-  if (stats && typeof stats.size === 'number') {
-    metadata.fileSize = stats.size;
-  }
-  
-  if (error && error.message) {
-    metadata.error = error.message;
-  }
-  
-  return {
-    text: '',
-    slides: [],
-    structure: {
-      hasStructure: false,
-      slideCount: 0,
-      hasNotes: false,
-      slideOrder: []
-    },
-    metadata
-  };
-  }
-  
   /**
+   * Extract PPTX content with graceful fallback
+   */
+  async extractPptxContent(filePath, options = {}) {
+    if (!JSZip) {
+      logger.warn('JSZip not available - returning PPTX fallback payload');
+      return await this.generatePptxFallbackResult(filePath, 'jszip_module_missing');
+    }
+
+    try {
+      const fileBuffer = await fs.readFile(filePath);
+      const zip = await JSZip.loadAsync(fileBuffer);
+      const slideEntries = Object.keys(zip.files)
+        .filter(name => /^ppt\/slides\/slide\d+\.xml$/i.test(name))
+        .sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
+
+      const slides = [];
+
+      for (const slidePath of slideEntries) {
+        const slideXml = await zip.files[slidePath].async('string');
+        const slideIndexMatch = slidePath.match(/slide(\d+)\.xml$/i);
+        const slideIndex = slideIndexMatch ? parseInt(slideIndexMatch[1], 10) : slides.length + 1;
+        const text = this.extractTextFromPptxXml(slideXml);
+
+        let notes;
+        const notesPath = ppt/notesSlides/notesSlide.xml;
+        const notesEntry = zip.files[notesPath];
+        if (notesEntry) {
+          try {
+            const notesXml = await notesEntry.async('string');
+            notes = this.extractTextFromPptxXml(notesXml) || undefined;
+          } catch (notesError) {
+            logger.warn(Unable to extract notes for slide : );
+          }
+        }
+
+        slides.push({
+          index: slideIndex,
+          id: slidePath,
+          text,
+          notes
+        });
+      }
+
+      const orderedSlides = slides.sort((a, b) => a.index - b.index);
+      const combinedText = orderedSlides
+        .map(slide => {
+          const segments = [Slide , slide.text || '(no visible text)'];
+          if (slide.notes) {
+            segments.push(Notes: );
+          }
+          return segments.filter(Boolean).join('\n');
+        })
+        .join('\n\n');
+
+      return {
+        text: combinedText,
+        slides: orderedSlides,
+        structure: {
+          hasStructure: true,
+          slideCount: orderedSlides.length,
+          hasNotes: orderedSlides.some(slide => Boolean(slide.notes)),
+          slideOrder: orderedSlides.map(slide => slide.index)
+        },
+        metadata: {
+          parser: 'jszip_extractor',
+          slideCount: orderedSlides.length,
+          fallback: false,
+          extractedAt: new Date().toISOString()
+        }
+      };
+    } catch (error) {
+      logger.warn('Built-in PPTX extraction failed:', error.message);
+      return await this.generatePptxFallbackResult(filePath, 'jszip_extraction_failed', error);
+    }
+  }
+
+  extractTextFromPptxXml(xml) {
+    if (!xml) {
+      return '';
+    }
+
+    const normalizedXml = xml.replace(/<a:br\s*\/>/gi, '\n');
+    const textRuns = [];
+    const regex = /<a:t[^>]*>(.*?)<\/a:t>/gims;
+    let match;
+
+    while ((match = regex.exec(normalizedXml)) !== null) {
+      const value = this.decodeXmlEntities(match[1]).replace(/\s+/g, ' ').trim();
+      if (value) {
+        textRuns.push(value);
+      }
+    }
+
+    if (textRuns.length === 0) {
+      const stripped = this.decodeXmlEntities(
+        normalizedXml.replace(/<[^>]+>/g, ' ')
+      ).replace(/\s+/g, ' ').trim();
+      return stripped;
+    }
+
+    return textRuns.join(' ').replace(/\s+/g, ' ').trim();
+  }
+
+  decodeXmlEntities(text) {
+    if (!text) {
+      return '';
+    }
+
+    return text
+      .replace(/&amp;/g, '&')
+      .replace(/&lt;/g, '<')
+      .replace(/&gt;/g, '>')
+      .replace(/&quot;/g, '"')
+      .replace(/&apos;/g, "'")
+      .replace(/&#39;/g, "'");
+  }
+
+  async generatePptxFallbackResult(filePath, reason, error) {
+    let stats;
+    try {
+      stats = await fs.stat(filePath);
+    } catch (statError) {
+      stats = null;
+    }
+
+    const metadata = {
+      parser: 'pptx_fallback',
+      fallback: true,
+      reason,
+      fileName: path.basename(filePath)
+    };
+
+    if (stats && typeof stats.size === 'number') {
+      metadata.fileSize = stats.size;
+    }
+
+    if (error && error.message) {
+      metadata.error = error.message;
+    }
+
+    return {
+      text: '',
+      slides: [],
+      structure: {
+        hasStructure: false,
+        slideCount: 0,
+        hasNotes: false,
+        slideOrder: []
+      },
+      metadata
+    };
+  }  /**
    * Process Excel documents
    * @param {string} filePath - Path to XLSX file
    * @param {Object} options - Processing options
@@ -1419,5 +1420,6 @@ class MultiFormatProcessor {
 }
 
 module.exports = MultiFormatProcessor;
+
 
 

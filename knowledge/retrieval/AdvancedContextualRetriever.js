@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Advanced Contextual Retriever
  * Multi-strategy retrieval with context expansion and lost-in-middle mitigation
  * Part of Advanced Document Processing Implementation
@@ -19,7 +19,7 @@ class AdvancedContextualRetriever {
     if (apiKey && apiKey !== 'placeholder' && apiKey.length > 10) {
       this.openai = new OpenAI({ apiKey });
     } else {
-      console.warn('⚠️ OpenAI API key not configured - Advanced retrieval will use basic methods');
+      console.warn('âš ï¸ OpenAI API key not configured - Advanced retrieval will use basic methods');
       this.openai = null;
     }
 
@@ -77,15 +77,15 @@ class AdvancedContextualRetriever {
 
       // Test OpenAI connection if available
       if (this.openai) {
-        console.log('🚀 Advanced retriever initialized with OpenAI support');
+        console.log('ðŸš€ Advanced retriever initialized with OpenAI support');
       } else {
-        console.log('🔄 Advanced retriever initialized in basic mode (no OpenAI)');
+        console.log('ðŸ”„ Advanced retriever initialized in basic mode (no OpenAI)');
       }
 
       this.initialized = true;
       this.isInitialized = true;
     } catch (error) {
-      console.warn('⚠️ Advanced retriever initialization failed:', error.message);
+      console.warn('âš ï¸ Advanced retriever initialization failed:', error.message);
       // Continue in basic mode
       this.initialized = true;
       this.isInitialized = true;
@@ -117,14 +117,14 @@ class AdvancedContextualRetriever {
   async retrieveWithAdvancedContext(query, context = {}, options = {}) {
     const config = { ...this.options, ...options };
     
-    console.log(`🔍 Starting advanced contextual retrieval for query: "${query.substring(0, 50)}..."`);
+    console.log(`ðŸ” Starting advanced contextual retrieval for query: "${query.substring(0, 50)}..."`);
     const startTime = Date.now();
     this.retrievalStats.totalQueries++;
 
     try {
       // Check if this is a system query - return empty results to avoid token usage
       if (this.isSystemQuery(query)) {
-        console.log('🔧 System query detected, returning empty results to avoid token usage');
+        console.log('ðŸ”§ System query detected, returning empty results to avoid token usage');
         return {
           chunks: [],
           confidence: 1.0,
@@ -135,9 +135,40 @@ class AdvancedContextualRetriever {
         };
       }
       
-      // Step 1: Generate query embedding
-      const queryEmbedding = await this.generateQueryEmbedding(query, context);
-      
+      // Step 1: Generate query embedding (if available)
+      let queryEmbedding = null;
+      let embeddingAvailable = false;
+
+      try {
+        queryEmbedding = await this.generateQueryEmbedding(query, context);
+        embeddingAvailable = Array.isArray(queryEmbedding);
+      } catch (embeddingError) {
+        console.warn('dY"? Embedding generation failed, falling back to text search:', embeddingError.message);
+      }
+
+      if (!embeddingAvailable) {
+        console.warn('dY"? Contextual embeddings unavailable - using text search fallback');
+        const fallbackLimit = config.maxResults || config.maxChunks || 5;
+        const fallbackResult = await this.performTextSearchFallback(query, fallbackLimit);
+        const retrievalTime = Date.now() - startTime;
+        this.retrievalStats.strategyUsage.fallback_text = (this.retrievalStats.strategyUsage.fallback_text || 0) + 1;
+        this.updateRetrievalStats(retrievalTime, { qualityScore: fallbackResult.metadata.qualityScore });
+
+        return {
+          chunks: fallbackResult.chunks,
+          metadata: {
+            retrievalTime,
+            totalChunks: fallbackResult.chunks.length,
+            averageRelevance: fallbackResult.metadata.averageRelevance,
+            strategiesUsed: fallbackResult.metadata.strategiesUsed,
+            contextExpansion: null,
+            qualityScore: fallbackResult.metadata.qualityScore,
+            fallbackApplied: true,
+            fallbackReason: fallbackResult.metadata.fallbackReason
+          }
+        };
+      }
+
       // Step 2: Execute multi-strategy retrieval
       const retrievalResults = await this.executeMultiStrategyRetrieval(
         query, 
@@ -145,7 +176,7 @@ class AdvancedContextualRetriever {
         context, 
         config
       );
-      
+
       // Step 3: Apply context expansion
       const expandedResults = await this.applyContextExpansion(
         retrievalResults, 
@@ -153,14 +184,14 @@ class AdvancedContextualRetriever {
         context, 
         config
       );
-      
+
       // Step 4: Apply lost-in-middle mitigation
       const optimizedResults = await this.applyLostInMiddleMitigation(
         expandedResults, 
         query, 
         config
       );
-      
+
       // Step 5: Apply quality optimization
       const finalResults = await this.applyQualityOptimization(
         optimizedResults, 
@@ -171,8 +202,8 @@ class AdvancedContextualRetriever {
       const retrievalTime = Date.now() - startTime;
       this.updateRetrievalStats(retrievalTime, finalResults);
 
-      console.log(`✅ Advanced retrieval completed in ${retrievalTime}ms`);
-      console.log(`📊 Retrieved ${finalResults.chunks.length} chunks with average relevance ${finalResults.averageRelevance.toFixed(3)}`);
+      console.log(`�o. Advanced retrieval completed in ${retrievalTime}ms`);
+      console.log(`dY"S Retrieved ${finalResults.chunks.length} chunks with average relevance ${finalResults.averageRelevance.toFixed(3)}`);
 
       return {
         chunks: finalResults.chunks,
@@ -185,9 +216,8 @@ class AdvancedContextualRetriever {
           qualityScore: finalResults.qualityScore
         }
       };
-
     } catch (error) {
-      console.error('❌ Advanced retrieval failed:', error);
+      console.error('âŒ Advanced retrieval failed:', error);
       throw error;
     }
   }
@@ -196,11 +226,11 @@ class AdvancedContextualRetriever {
    * Generate query embedding with context
    */
   async generateQueryEmbedding(query, context) {
-    console.log('🎯 Generating contextual query embedding...');
+    console.log('ðŸŽ¯ Generating contextual query embedding...');
     
     // Check if OpenAI is available
     if (!this.openai) {
-      console.warn('⚠️ OpenAI not available - using fallback query processing');
+      console.warn('âš ï¸ OpenAI not available - using fallback query processing');
       return null;
     }
     
@@ -226,10 +256,10 @@ class AdvancedContextualRetriever {
         input: contextualQuery
       });
 
-      console.log('✅ Query embedding generated');
+      console.log('âœ… Query embedding generated');
       return response.data[0].embedding;
     } catch (error) {
-      console.error('❌ Failed to generate query embedding:', error);
+      console.error('âŒ Failed to generate query embedding:', error);
       throw error;
     }
   }
@@ -238,14 +268,14 @@ class AdvancedContextualRetriever {
    * Execute multi-strategy retrieval
    */
   async executeMultiStrategyRetrieval(query, queryEmbedding, context, config) {
-    console.log('🔄 Executing multi-strategy retrieval...');
+    console.log('ðŸ”„ Executing multi-strategy retrieval...');
     
     const allResults = [];
     const strategiesUsed = [];
 
     for (const strategy of config.strategies) {
       try {
-        console.log(`📋 Executing ${strategy} strategy...`);
+        console.log(`ðŸ“‹ Executing ${strategy} strategy...`);
         const strategyResults = await this.executeRetrievalStrategy(
           strategy, 
           query, 
@@ -263,14 +293,14 @@ class AdvancedContextualRetriever {
             (this.retrievalStats.strategyUsage[strategy] || 0) + 1;
         }
       } catch (error) {
-        console.warn(`⚠️ Strategy ${strategy} failed:`, error.message);
+        console.warn(`âš ï¸ Strategy ${strategy} failed:`, error.message);
       }
     }
 
     // Deduplicate results
     const uniqueResults = this.deduplicateResults(allResults);
     
-    console.log(`✅ Multi-strategy retrieval completed: ${uniqueResults.length} unique chunks`);
+    console.log(`âœ… Multi-strategy retrieval completed: ${uniqueResults.length} unique chunks`);
     return {
       chunks: uniqueResults,
       strategiesUsed
@@ -300,7 +330,7 @@ class AdvancedContextualRetriever {
         return await this.advancedMultiFeatureRetrieval(query, queryEmbedding, context, maxResults);
       
       default:
-        console.warn(`⚠️ Unknown retrieval strategy: ${strategy}`);
+        console.warn(`âš ï¸ Unknown retrieval strategy: ${strategy}`);
         return [];
     }
   }
@@ -331,7 +361,7 @@ class AdvancedContextualRetriever {
         retrievalStrategy: 'vector_only'
       }));
     } catch (error) {
-      console.error('❌ Vector-only retrieval failed:', error);
+      console.error('âŒ Vector-only retrieval failed:', error);
       return [];
     }
   }
@@ -366,7 +396,7 @@ class AdvancedContextualRetriever {
         retrievalStrategy: 'hybrid'
       }));
     } catch (error) {
-      console.error('❌ Hybrid retrieval failed:', error);
+      console.error('âŒ Hybrid retrieval failed:', error);
       return [];
     }
   }
@@ -404,7 +434,7 @@ class AdvancedContextualRetriever {
         }));
         allResults.push(...scaleResults);
       } catch (error) {
-        console.warn(`⚠️ Multi-scale retrieval failed for scale ${scale}:`, error.message);
+        console.warn(`âš ï¸ Multi-scale retrieval failed for scale ${scale}:`, error.message);
       }
     }
 
@@ -417,7 +447,7 @@ class AdvancedContextualRetriever {
    * semantic boundaries, parent-child relationships, quality validation, etc.
    */
     async advancedMultiFeatureRetrieval(queryText, queryEmbedding, context, maxResults) {
-      console.log('🚀 Executing advanced multi-feature retrieval...');
+      console.log('ðŸš€ Executing advanced multi-feature retrieval...');
       
       const query = `
         WITH ranked_chunks AS (
@@ -530,13 +560,13 @@ class AdvancedContextualRetriever {
         }
       }));
 
-      console.log(`✅ Advanced multi-feature retrieval completed: ${enhancedResults.length} chunks with enhanced scoring`);
+      console.log(`âœ… Advanced multi-feature retrieval completed: ${enhancedResults.length} chunks with enhanced scoring`);
       return enhancedResults;
       
     } catch (error) {
-      console.error('❌ Advanced multi-feature retrieval failed:', error);
+      console.error('âŒ Advanced multi-feature retrieval failed:', error);
       // Fallback to hybrid retrieval
-      console.log('🔄 Falling back to hybrid retrieval...');
+      console.log('ðŸ”„ Falling back to hybrid retrieval...');
       return await this.hybridRetrieval(queryText, queryEmbedding, maxResults);
     }
   }
@@ -588,7 +618,7 @@ class AdvancedContextualRetriever {
         retrievalStrategy: 'contextual'
       }));
     } catch (error) {
-      console.error('❌ Contextual retrieval failed:', error);
+      console.error('âŒ Contextual retrieval failed:', error);
       return [];
     }
   }
@@ -601,7 +631,7 @@ class AdvancedContextualRetriever {
       return retrievalResults;
     }
 
-    console.log('🔄 Applying context expansion...');
+    console.log('ðŸ”„ Applying context expansion...');
     const expandedChunks = [...retrievalResults.chunks];
 
     // Hierarchical expansion
@@ -619,7 +649,7 @@ class AdvancedContextualRetriever {
     // Deduplicate expanded results
     const uniqueExpandedChunks = this.deduplicateResults(expandedChunks);
 
-    console.log(`✅ Context expansion completed: ${uniqueExpandedChunks.length} chunks`);
+    console.log(`âœ… Context expansion completed: ${uniqueExpandedChunks.length} chunks`);
     return {
       ...retrievalResults,
       chunks: uniqueExpandedChunks,
@@ -654,7 +684,7 @@ class AdvancedContextualRetriever {
             });
           }
         } catch (error) {
-          console.warn(`⚠️ Failed to expand parent context for ${chunk.chunk_id}`);
+          console.warn(`âš ï¸ Failed to expand parent context for ${chunk.chunk_id}`);
         }
       }
 
@@ -673,7 +703,7 @@ class AdvancedContextualRetriever {
             });
           }
         } catch (error) {
-          console.warn(`⚠️ Failed to expand child context for ${chunk.chunk_id}`);
+          console.warn(`âš ï¸ Failed to expand child context for ${chunk.chunk_id}`);
         }
       }
     }
@@ -686,7 +716,7 @@ class AdvancedContextualRetriever {
    */
   async expandSemanticContext(chunks, query) {
     try {
-      console.log('🔍 Expanding semantic context...');
+      console.log('ðŸ” Expanding semantic context...');
       
       if (chunks.length === 0) return [];
       
@@ -718,11 +748,11 @@ class AdvancedContextualRetriever {
       const maxExpansion = Math.min(uniqueExpanded.length, 3);
       const finalExpanded = uniqueExpanded.slice(0, maxExpansion);
       
-      console.log(`✅ Semantic expansion: ${finalExpanded.length} additional chunks found`);
+      console.log(`âœ… Semantic expansion: ${finalExpanded.length} additional chunks found`);
       return finalExpanded;
       
     } catch (error) {
-      console.warn('⚠️ Semantic context expansion failed:', error.message);
+      console.warn('âš ï¸ Semantic context expansion failed:', error.message);
       return [];
     }
   }
@@ -789,7 +819,7 @@ class AdvancedContextualRetriever {
       return candidates.slice(0, 2); // Limit to top 2 matches per chunk
       
     } catch (error) {
-      console.warn('⚠️ Database query failed in semantic expansion:', error.message);
+      console.warn('âš ï¸ Database query failed in semantic expansion:', error.message);
       return [];
     }
   }
@@ -802,7 +832,7 @@ class AdvancedContextualRetriever {
       return retrievalResults;
     }
 
-    console.log('🔄 Applying lost-in-middle mitigation...');
+    console.log('ðŸ”„ Applying lost-in-middle mitigation...');
     
     let reorderedChunks = [...retrievalResults.chunks];
 
@@ -814,7 +844,7 @@ class AdvancedContextualRetriever {
       reorderedChunks = this.interleaveChunks(reorderedChunks);
     }
 
-    console.log('✅ Lost-in-middle mitigation applied');
+    console.log('âœ… Lost-in-middle mitigation applied');
     return {
       ...retrievalResults,
       chunks: reorderedChunks
@@ -880,7 +910,7 @@ class AdvancedContextualRetriever {
       return retrievalResults;
     }
 
-    console.log('🔄 Applying quality optimization...');
+    console.log('ðŸ”„ Applying quality optimization...');
     
     let optimizedChunks = [...retrievalResults.chunks];
 
@@ -901,7 +931,7 @@ class AdvancedContextualRetriever {
 
     const qualityScore = this.calculateOverallQuality(optimizedChunks);
 
-    console.log(`✅ Quality optimization completed (score: ${qualityScore.toFixed(3)})`);
+    console.log(`âœ… Quality optimization completed (score: ${qualityScore.toFixed(3)})`);
     return {
       ...retrievalResults,
       chunks: optimizedChunks,
@@ -969,7 +999,7 @@ class AdvancedContextualRetriever {
   maximizeComplementarity(chunks) {
     if (chunks.length <= 1) return chunks;
     
-    console.log('🔄 Maximizing chunk complementarity...');
+    console.log('ðŸ”„ Maximizing chunk complementarity...');
     
     try {
       // Calculate complementarity matrix
@@ -978,11 +1008,11 @@ class AdvancedContextualRetriever {
       // Select chunks that maximize information diversity
       const selectedChunks = this.selectComplementaryChunks(chunks, complementarityMatrix);
       
-      console.log(`✅ Complementarity optimization: ${selectedChunks.length}/${chunks.length} chunks selected`);
+      console.log(`âœ… Complementarity optimization: ${selectedChunks.length}/${chunks.length} chunks selected`);
       return selectedChunks;
       
     } catch (error) {
-      console.warn('⚠️ Complementarity maximization failed:', error.message);
+      console.warn('âš ï¸ Complementarity maximization failed:', error.message);
       return chunks; // Return original chunks on error
     }
   }
@@ -1141,6 +1171,106 @@ class AdvancedContextualRetriever {
       }));
   }
 
+  async performTextSearchFallback(query, limit = 5) {
+    if (!this.db) {
+      console.warn('dY"? Database not available for text search fallback');
+      return {
+        chunks: [],
+        metadata: {
+          strategiesUsed: ['text_search_fallback'],
+          averageRelevance: 0,
+          qualityScore: 0,
+          fallbackReason: 'embedding_unavailable_no_database'
+        }
+      };
+    }
+
+    const sanitizedQuery = (query || '').trim();
+    if (!sanitizedQuery) {
+      return {
+        chunks: [],
+        metadata: {
+          strategiesUsed: ['text_search_fallback'],
+          averageRelevance: 0,
+          qualityScore: 0,
+          fallbackReason: 'empty_query'
+        }
+      };
+    }
+
+    const tsQueryInput = sanitizedQuery.replace(/[^a-zA-Z0-9\s]/g, ' ').trim() || sanitizedQuery;
+    const textSearchSql = `
+      SELECT 
+        chunk_id, source_id, version, chunk_index, content, heading,
+        page_number, token_count, quality_score, metadata,
+        parent_chunk_id, child_chunk_ids, sibling_chunk_ids,
+        scale, node_id, hierarchy_path,
+        ts_rank(
+          to_tsvector('english', COALESCE(heading, '') || ' ' || content),
+          plainto_tsquery('english', $1)
+        ) AS text_rank
+      FROM kb_chunks 
+      WHERE to_tsvector('english', COALESCE(heading, '') || ' ' || content)
+            @@ plainto_tsquery('english', $1)
+      ORDER BY text_rank DESC
+      LIMIT $2
+    `;
+
+    let rows = [];
+    try {
+      const result = await this.db.query(textSearchSql, [tsQueryInput, limit]);
+      rows = result.rows;
+    } catch (error) {
+      console.warn('dY"? Text search fallback query failed:', error.message);
+    }
+
+    if (!rows || rows.length === 0) {
+      const likeSql = `
+        SELECT 
+          chunk_id, source_id, version, chunk_index, content, heading,
+          page_number, token_count, quality_score, metadata,
+          parent_chunk_id, child_chunk_ids, sibling_chunk_ids,
+          scale, node_id, hierarchy_path,
+          0.05 AS partial_match_score
+        FROM kb_chunks
+        WHERE content ILIKE '%' || $1 || '%' OR heading ILIKE '%' || $1 || '%'
+        LIMIT $2
+      `;
+      try {
+        const result = await this.db.query(likeSql, [sanitizedQuery, limit]);
+        rows = result.rows;
+      } catch (likeError) {
+        console.warn('dY"? Partial text fallback failed:', likeError.message);
+      }
+    }
+
+    const normalized = (rows || []).map(row => {
+      const relevance = typeof row.text_rank === 'number'
+        ? row.text_rank
+        : (typeof row.partial_match_score === 'number' ? row.partial_match_score : 0);
+      return {
+        ...row,
+        similarity_score: relevance,
+        retrievalStrategy: 'text_search_fallback'
+      };
+    });
+
+    const averageRelevance = normalized.length > 0
+      ? normalized.reduce((sum, chunk) => sum + (chunk.similarity_score || 0), 0) / normalized.length
+      : 0;
+    const qualityScore = Math.min(0.9, averageRelevance || 0);
+
+    return {
+      chunks: normalized,
+      metadata: {
+        strategiesUsed: ['text_search_fallback'],
+        averageRelevance,
+        qualityScore,
+        confidenceScore: qualityScore,
+        fallbackReason: 'embedding_unavailable'
+      }
+    };
+  }
   calculateOverallQuality(chunks) {
     if (chunks.length === 0) return 0;
     
@@ -1182,7 +1312,7 @@ class AdvancedContextualRetriever {
         lostInMiddleMitigation: this.options.lostInMiddleMitigation
       };
     } catch (error) {
-      console.error('❌ Failed to get engine stats:', error);
+      console.error('âŒ Failed to get engine stats:', error);
       return {
         availableStrategies: this.options.strategies,
         totalChunks: 0,
@@ -1194,3 +1324,4 @@ class AdvancedContextualRetriever {
 }
 
 module.exports = AdvancedContextualRetriever;
+

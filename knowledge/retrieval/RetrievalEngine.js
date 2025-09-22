@@ -473,10 +473,11 @@ class RetrievalEngine {
     
     try {
       // Step 1: Parallel retrieval using multiple strategies
+      const maxResults = options.maxResults || options.topK || 10;
       const [vectorResults, hybridResults, contextualResults] = await Promise.all([
-        this.vectorOnlyRetrieval(query, context, { ...options, topK: Math.ceil((options.topK || 10) / 2) }),
-        this.hybridRetrieval(query, context, { ...options, topK: Math.ceil((options.topK || 10) / 2) }),
-        this.contextualRetrieval(query, context, { ...options, topK: Math.ceil((options.topK || 10) / 3) })
+        this.vectorOnlyRetrieval(query, context, { ...options, topK: Math.ceil(maxResults / 2) }),
+        this.hybridRetrieval(query, context, { ...options, topK: Math.ceil(maxResults / 2) }),
+        this.contextualRetrieval(query, context, { ...options, topK: Math.ceil(maxResults / 3) })
       ]);
       
       // Step 2: Combine all results
@@ -540,7 +541,7 @@ class RetrievalEngine {
       // Step 6: Sort by multi-feature score and limit results
       const finalChunks = multiFeatureChunks
         .sort((a, b) => b.multi_feature_score - a.multi_feature_score)
-        .slice(0, options.maxResults || options.topK || 10);
+        .slice(0, maxResults);
       
       logger.info(`🎯 Advanced multi-feature results: ${finalChunks.length} chunks from ${uniqueChunks.length} candidates`);
       

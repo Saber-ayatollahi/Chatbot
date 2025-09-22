@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Multi-Format Document Processor
  * Comprehensive support for various document formats with structure preservation
  * Production-ready with advanced parsing and error handling
@@ -21,31 +21,31 @@ let pptxParser = null;
 try {
   mammoth = require('mammoth');
 } catch (error) {
-  console.warn('⚠️ mammoth not available - DOCX processing will be limited');
+  console.warn('âš ï¸ mammoth not available - DOCX processing will be limited');
 }
 
 try {
   pdfParse = require('pdf-parse');
 } catch (error) {
-  console.warn('⚠️ pdf-parse not available - PDF processing will be limited');
+  console.warn('âš ï¸ pdf-parse not available - PDF processing will be limited');
 }
 
 try {
   htmlToText = require('html-to-text');
 } catch (error) {
-  console.warn('⚠️ html-to-text not available - HTML processing will be limited');
+  console.warn('âš ï¸ html-to-text not available - HTML processing will be limited');
 }
 
 try {
   marked = require('marked');
 } catch (error) {
-  console.warn('⚠️ marked not available - Markdown processing will be limited');
+  console.warn('âš ï¸ marked not available - Markdown processing will be limited');
 }
 
 try {
   xlsx = require('xlsx');
 } catch (error) {
-  console.warn('⚠️ xlsx not available - Excel processing will be limited');
+  console.warn('âš ï¸ xlsx not available - Excel processing will be limited');
 }
 
 class MultiFormatProcessor {
@@ -213,14 +213,14 @@ class MultiFormatProcessor {
         .filter(([name, parser]) => parser === null)
         .map(([name]) => name);
       
-      logger.info(`✅ Multi-format processors initialized. Available: [${availableParsers.join(', ')}]`);
+      logger.info(`âœ… Multi-format processors initialized. Available: [${availableParsers.join(', ')}]`);
       
       if (unavailableParsers.length > 0) {
-        logger.warn(`⚠️ Unavailable parsers: [${unavailableParsers.join(', ')}]`);
+        logger.warn(`âš ï¸ Unavailable parsers: [${unavailableParsers.join(', ')}]`);
       }
       
     } catch (error) {
-      logger.warn('⚠️ Parser initialization failed:', error.message);
+      logger.warn('âš ï¸ Parser initialization failed:', error.message);
     }
   }
 
@@ -235,7 +235,7 @@ class MultiFormatProcessor {
     const startTime = performance.now();
     
     try {
-      logger.info(`📄 Processing document: ${path.basename(filePath)}`);
+      logger.info(`ðŸ“„ Processing document: ${path.basename(filePath)}`);
       
       // Validate file
       const fileValidation = await this.validateFile(filePath);
@@ -245,14 +245,14 @@ class MultiFormatProcessor {
       
       // Detect format
       const formatDetection = await this.detectFormat(filePath);
-      logger.info(`🔍 Detected format: ${formatDetection.format} (confidence: ${Math.round(formatDetection.confidence * 100)}%)`);
+      logger.info(`ðŸ” Detected format: ${formatDetection.format} (confidence: ${Math.round(formatDetection.confidence * 100)}%)`);
       
       // Generate cache key
       const cacheKey = await this.generateCacheKey(filePath, formatDetection.format, options);
       
       // Check cache
       if (this.options.performance.enableCaching && this.processingCache.has(cacheKey)) {
-        logger.debug('📋 Using cached processing result');
+        logger.debug('ðŸ“‹ Using cached processing result');
         this.performanceMetrics.cacheHitRate++;
         return this.processingCache.get(cacheKey);
       }
@@ -280,7 +280,7 @@ class MultiFormatProcessor {
       const processingTime = performance.now() - startTime;
       this.updateMetrics(formatDetection.format, processingTime, true);
       
-      logger.info(`✅ Document processed successfully in ${Math.round(processingTime)}ms`);
+      logger.info(`âœ… Document processed successfully in ${Math.round(processingTime)}ms`);
       
       return {
         ...finalResult,
@@ -293,7 +293,7 @@ class MultiFormatProcessor {
       const processingTime = performance.now() - startTime;
       this.updateMetrics('unknown', processingTime, false);
       
-      logger.error(`❌ Document processing failed for ${filePath}:`, error);
+      logger.error(`âŒ Document processing failed for ${filePath}:`, error);
       return this.generateFallbackResult(filePath, error);
     }
   }
@@ -404,7 +404,7 @@ class MultiFormatProcessor {
       };
       
     } catch (error) {
-      logger.error('❌ Format detection failed:', error);
+      logger.error('âŒ Format detection failed:', error);
       return {
         format: 'unknown',
         confidence: 0.1,
@@ -441,7 +441,7 @@ class MultiFormatProcessor {
           return await this.processUnknownFormat(filePath, options);
       }
     } catch (error) {
-      logger.error(`❌ Format-specific processing failed for ${format}:`, error);
+      logger.error(`âŒ Format-specific processing failed for ${format}:`, error);
       throw error;
     }
   }
@@ -461,7 +461,7 @@ class MultiFormatProcessor {
       
       const mammoth = this.parserInstances.get('mammoth');
       if (!mammoth) {
-        logger.error('❌ Mammoth parser not available. Available parsers:', Array.from(this.parserInstances.keys()));
+        logger.error('âŒ Mammoth parser not available. Available parsers:', Array.from(this.parserInstances.keys()));
         throw new Error('Mammoth parser not available');
       }
       
@@ -499,7 +499,7 @@ class MultiFormatProcessor {
       };
       
     } catch (error) {
-      logger.error('❌ DOCX processing failed:', error);
+      logger.error('âŒ DOCX processing failed:', error);
       throw new Error(`DOCX processing failed: ${error.message}`);
     }
   }
@@ -540,7 +540,7 @@ class MultiFormatProcessor {
       };
       
     } catch (error) {
-      logger.error('❌ PDF processing failed:', error);
+      logger.error('âŒ PDF processing failed:', error);
       throw new Error(`PDF processing failed: ${error.message}`);
     }
   }
@@ -566,7 +566,7 @@ class MultiFormatProcessor {
       };
       
     } catch (error) {
-      logger.error('❌ PPTX processing failed:', error);
+      logger.error('âŒ PPTX processing failed:', error);
       throw new Error(`PPTX processing failed: ${error.message}`);
     }
   }
@@ -621,7 +621,7 @@ class MultiFormatProcessor {
       };
       
     } catch (error) {
-      logger.error('❌ XLSX processing failed:', error);
+      logger.error('âŒ XLSX processing failed:', error);
       throw new Error(`XLSX processing failed: ${error.message}`);
     }
   }
@@ -660,7 +660,7 @@ class MultiFormatProcessor {
       };
       
     } catch (error) {
-      logger.error('❌ HTML processing failed:', error);
+      logger.error('âŒ HTML processing failed:', error);
       throw new Error(`HTML processing failed: ${error.message}`);
     }
   }
@@ -708,7 +708,7 @@ class MultiFormatProcessor {
       };
       
     } catch (error) {
-      logger.error('❌ Markdown processing failed:', error);
+      logger.error('âŒ Markdown processing failed:', error);
       throw new Error(`Markdown processing failed: ${error.message}`);
     }
   }
@@ -740,7 +740,7 @@ class MultiFormatProcessor {
       };
       
     } catch (error) {
-      logger.error('❌ Text processing failed:', error);
+      logger.error('âŒ Text processing failed:', error);
       throw new Error(`Text processing failed: ${error.message}`);
     }
   }
@@ -756,7 +756,7 @@ class MultiFormatProcessor {
       // Try to read as text
       const content = await fs.readFile(filePath, 'utf8');
       
-      logger.warn(`⚠️ Processing unknown format as text: ${path.basename(filePath)}`);
+      logger.warn(`âš ï¸ Processing unknown format as text: ${path.basename(filePath)}`);
       
       return {
         content: content,
@@ -951,7 +951,7 @@ class MultiFormatProcessor {
       return result;
       
     } catch (error) {
-      logger.error('❌ Post-processing failed:', error);
+      logger.error('âŒ Post-processing failed:', error);
       return result; // Return original result if post-processing fails
     }
   }
@@ -1109,7 +1109,7 @@ class MultiFormatProcessor {
         tables
       };
     } catch (error) {
-      logger.warn('⚠️ Structure extraction failed:', error);
+      logger.warn('âš ï¸ Structure extraction failed:', error);
       return { headings: [], sections: [], paragraphs: [], lists: [], tables: [] };
     }
   }
@@ -1141,7 +1141,7 @@ class MultiFormatProcessor {
         // Convert list items
         .replace(/<li[^>]*>(.*?)<\/li>/gi, (match, text) => {
           const cleanItem = text.replace(/<[^>]*>/g, '').trim();
-          return cleanItem ? `• ${cleanItem}\n` : '';
+          return cleanItem ? `â€¢ ${cleanItem}\n` : '';
         })
         // Remove remaining HTML tags
         .replace(/<[^>]*>/g, ' ')
@@ -1153,7 +1153,7 @@ class MultiFormatProcessor {
       
       return cleanText;
     } catch (error) {
-      logger.warn('⚠️ HTML to text conversion failed:', error);
+      logger.warn('âš ï¸ HTML to text conversion failed:', error);
       // Fallback: simple tag removal
       return htmlContent.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
     }
@@ -1212,7 +1212,7 @@ class MultiFormatProcessor {
       return metadata;
       
     } catch (error) {
-      logger.warn('⚠️ Failed to extract DOCX metadata:', error);
+      logger.warn('âš ï¸ Failed to extract DOCX metadata:', error);
       return {
         fileName: path.basename(filePath),
         format: 'docx',
@@ -1240,7 +1240,7 @@ class MultiFormatProcessor {
    */
   clearCaches() {
     this.processingCache.clear();
-    logger.info('🧹 Multi-format processor caches cleared');
+    logger.info('ðŸ§¹ Multi-format processor caches cleared');
   }
 
   /**
@@ -1258,3 +1258,4 @@ class MultiFormatProcessor {
 }
 
 module.exports = MultiFormatProcessor;
+

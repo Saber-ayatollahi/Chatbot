@@ -46,41 +46,51 @@ class SmartChunkSelector {
    * @returns {Object} Optimized chunk selection
    */
   async selectOptimalChunks(chunks, query, options = {}) {
-    const startTime = Date.now();\r\n\r\n    const {\r\n      tokenBudget = 1500,\r\n      maxChunks = 5,\r\n      complexity = 'standard',\r\n      prioritizeQuality = true\r\n    } = options;\r\n\r\n    try {      logger.info(`ðŸ”§ Smart chunk selection: ${chunks.length} chunks, budget: ${tokenBudget} tokens`);
-      
+    const startTime = Date.now();
+
+    const {
+      tokenBudget = 1500,
+      maxChunks = 5,
+      complexity = 'standard',
+      prioritizeQuality = true
+    } = options;
+
+    try {
+      logger.info(`dY" Smart chunk selection: ${chunks.length} chunks, budget: ${tokenBudget} tokens`);
+
       // Step 1: Initial filtering
       const filteredChunks = this.applyInitialFilters(chunks, query);
-      
+
       // Step 2: Score and rank chunks
       const scoredChunks = this.scoreChunks(filteredChunks, query, options);
-      
+
       // Step 3: Apply diversity constraints
       const diversifiedChunks = this.applyDiversityConstraints(scoredChunks, options);
-      
+
       // Step 4: Optimize for token budget
       const optimizedChunks = this.optimizeForTokenBudget(
-        diversifiedChunks, 
-        tokenBudget, 
+        diversifiedChunks,
+        tokenBudget,
         maxChunks,
         complexity
       );
-      
+
       // Step 5: Final content optimization
       const finalChunks = this.optimizeChunkContent(optimizedChunks, tokenBudget);
-      
+
       const processingTime = Date.now() - startTime;
-      
+
       // Update statistics
       this.updateStats(chunks.length, finalChunks.length, processingTime);
-      
+
       const result = {
         chunks: finalChunks,
         originalCount: chunks.length,
         selectedCount: finalChunks.length,
         estimatedTokens: this.estimateTokenUsage(finalChunks),
-        tokenBudget: tokenBudget,
+        tokenBudget,
         utilizationRatio: this.estimateTokenUsage(finalChunks) / tokenBudget,
-        processingTime: processingTime,
+        processingTime,
         optimizations: {
           filtered: chunks.length - filteredChunks.length,
           diversified: filteredChunks.length - diversifiedChunks.length,
@@ -88,25 +98,25 @@ class SmartChunkSelector {
           contentOptimized: optimizedChunks.length - finalChunks.length
         }
       };
-      
-      logger.info(`âœ… Chunk selection completed: ${result.selectedCount}/${result.originalCount} chunks, ${result.estimatedTokens} tokens`);
-      
+
+      logger.info(`�o. Chunk selection completed: ${result.selectedCount}/${result.originalCount} chunks, ${result.estimatedTokens} tokens`);
+
       return result;
-      
+
     } catch (error) {
-      logger.error('âŒ Smart chunk selection failed:', error);
-      
+      logger.error('�?O Smart chunk selection failed:', error);
+
       // Fallback: return first N chunks with basic filtering
       const fallbackChunks = chunks
         .filter(chunk => chunk.content && chunk.content.length > this.options.minChunkLength)
         .slice(0, maxChunks);
-      
+
       return {
         chunks: fallbackChunks,
         originalCount: chunks.length,
         selectedCount: fallbackChunks.length,
         estimatedTokens: this.estimateTokenUsage(fallbackChunks),
-        tokenBudget: tokenBudget,
+        tokenBudget,
         processingTime: Date.now() - startTime,
         fallback: true,
         error: error.message

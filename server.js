@@ -28,9 +28,8 @@ const chatRoutes = require('./routes/chat');
 const documentManagementRoutes = require('./routes/documentManagement');
 const { getRouter: getIngestionRouter, initialize: initializeIngestionRoutes } = require('./routes/ingestion');
 const { getRouter: getRAGAnalyticsRouter, initialize: initializeRAGAnalyticsRoutes } = require('./routes/rag-analytics');
-
-// Import simple admin routes
-const simpleAdminRoutes = require('./routes/simple-admin');
+const createSimpleAdminRouter = require('./routes/simple-admin');
+const RBACManager = require('./services/RBACManager');
 
 // Use routes
 app.use('/api/chat', chatRoutes);
@@ -72,10 +71,13 @@ async function startServer() {
     await initializeRAGAnalyticsRoutes();
     console.log('✅ RAG Analytics routes initialized successfully');
 
-    // Mount simple admin routes
-    console.log('🔧 Mounting admin routes...');
+    // Mount simple admin routes with RBAC protection
+    console.log('🔐 Configuring admin authentication middleware...');
+    const rbacManager = new RBACManager();
+    const simpleAdminRoutes = createSimpleAdminRouter({ rbacManager });
+    app.locals.rbacManager = rbacManager;
     app.use('/api/admin', simpleAdminRoutes);
-    console.log('✅ Admin routes mounted successfully');
+    console.log('✅ Admin routes secured and mounted successfully');
     
     // Initialize WebSocket server
     console.log('🔌 Initializing WebSocket server...');

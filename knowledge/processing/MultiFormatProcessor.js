@@ -42,7 +42,13 @@ try {
   console.warn('âš ï¸ marked not available - Markdown processing will be limited');
 }
 
-\r\n\r\ntry {\r\n  JSZip = require('jszip');\r\n} catch (error) {\r\n  console.warn('Warning: jszip not available - PPTX text extraction will be limited');\r\n}
+let JSZip = null;
+
+try {
+  JSZip = require('jszip');
+} catch (error) {
+  console.warn('Warning: jszip not available - PPTX text extraction will be limited');
+}
 
 class MultiFormatProcessor {
   constructor(options = {}) {

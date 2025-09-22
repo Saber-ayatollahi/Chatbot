@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Local Chunk Preprocessor
  * Reduces token usage by preprocessing chunks locally before sending to LLM
  */
@@ -7,8 +7,8 @@ class ChunkPreprocessor {
   constructor(options = {}) {
     this.maxTokensPerChunk = options.maxTokensPerChunk || 200;
     this.maxTotalTokens = options.maxTotalTokens || 1500;
-    this.preserveKeyPhrases = options.preserveKeyPhrases || true;
-    this.extractNumbers = options.extractNumbers || true;
+    this.preserveKeyPhrases = options.preserveKeyPhrases ?? true;
+    this.extractNumbers = options.extractNumbers ?? true;
     this.logger = require('../../utils/logger');
   }
 
@@ -33,8 +33,8 @@ class ChunkPreprocessor {
       
       const processingTime = Date.now() - startTime;
       
-      this.logger.info(`🔧 Local preprocessing completed in ${processingTime}ms`);
-      this.logger.info(`📊 Token reduction: ${this.estimateTokens(chunks)} → ${this.estimateTokens([{content: finalContent}])} tokens`);
+      this.logger.info(`ðŸ”§ Local preprocessing completed in ${processingTime}ms`);
+      this.logger.info(`ðŸ“Š Token reduction: ${this.estimateTokens(chunks)} â†’ ${this.estimateTokens([{content: finalContent}])} tokens`);
       
       return {
         condensedContent: finalContent,
@@ -46,7 +46,7 @@ class ChunkPreprocessor {
       };
       
     } catch (error) {
-      this.logger.error('❌ Chunk preprocessing failed:', error);
+      this.logger.error('âŒ Chunk preprocessing failed:', error);
       // Fallback: return original chunks with basic truncation
       return this.fallbackProcessing(chunks);
     }
@@ -129,7 +129,7 @@ class ChunkPreprocessor {
     numericalData.push(...percentages);
     
     // Extract monetary amounts
-    const amounts = content.match(/[$€£¥]\s*\d+(?:,\d{3})*(?:\.\d{2})?/g) || [];
+    const amounts = content.match(/[$â‚¬Â£Â¥]\s*\d+(?:,\d{3})*(?:\.\d{2})?/g) || [];
     numericalData.push(...amounts);
     
     // Extract years
@@ -325,3 +325,4 @@ class ChunkPreprocessor {
 }
 
 module.exports = ChunkPreprocessor;
+

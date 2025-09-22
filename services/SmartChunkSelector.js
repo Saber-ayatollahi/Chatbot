@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Smart Chunk Selector
  * Pre-filters and optimizes chunks before token-heavy processing
  */
@@ -46,17 +46,7 @@ class SmartChunkSelector {
    * @returns {Object} Optimized chunk selection
    */
   async selectOptimalChunks(chunks, query, options = {}) {
-    const startTime = Date.now();
-    
-    try {
-      const {
-        tokenBudget = 1500,
-        maxChunks = 5,
-        complexity = 'standard',
-        prioritizeQuality = true
-      } = options;
-      
-      logger.info(`🔧 Smart chunk selection: ${chunks.length} chunks, budget: ${tokenBudget} tokens`);
+    const startTime = Date.now();\r\n\r\n    const {\r\n      tokenBudget = 1500,\r\n      maxChunks = 5,\r\n      complexity = 'standard',\r\n      prioritizeQuality = true\r\n    } = options;\r\n\r\n    try {      logger.info(`ðŸ”§ Smart chunk selection: ${chunks.length} chunks, budget: ${tokenBudget} tokens`);
       
       // Step 1: Initial filtering
       const filteredChunks = this.applyInitialFilters(chunks, query);
@@ -99,12 +89,12 @@ class SmartChunkSelector {
         }
       };
       
-      logger.info(`✅ Chunk selection completed: ${result.selectedCount}/${result.originalCount} chunks, ${result.estimatedTokens} tokens`);
+      logger.info(`âœ… Chunk selection completed: ${result.selectedCount}/${result.originalCount} chunks, ${result.estimatedTokens} tokens`);
       
       return result;
       
     } catch (error) {
-      logger.error('❌ Smart chunk selection failed:', error);
+      logger.error('âŒ Smart chunk selection failed:', error);
       
       // Fallback: return first N chunks with basic filtering
       const fallbackChunks = chunks
@@ -488,3 +478,4 @@ class SmartChunkSelector {
 }
 
 module.exports = SmartChunkSelector;
+

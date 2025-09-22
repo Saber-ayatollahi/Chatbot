@@ -689,54 +689,57 @@ class MultiFormatProcessor {
   }
 
 
-  decodeXmlEntities(text) {
-    if (!text) {
-      return '';
-    }
 
-    return text
-      .replace(/&amp;/g, '&')
-      .replace(/&lt;/g, '<')
-      .replace(/&gt;/g, '>')
-      .replace(/&quot;/g, '"')
-      .replace(/&apos;/g, ''')
-      .replace(/&#39;/g, ''')
+decodeXmlEntities(text) {
+  if (!text) {
+    return '';
   }
-  async generatePptxFallbackResult(filePath, reason, error) {
-    let stats;
-    try {
-      stats = await fs.stat(filePath);
-    } catch (statError) {
-      stats = null;
-    }
 
-    const metadata = {
-      parser: 'pptx_fallback',
-      fallback: true,
-      reason,
-      fileName: path.basename(filePath)
-    };
+  return text
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&apos;/g, ''')
+    .replace(/&#39;/g, ''');
+}
 
-    if (stats && typeof stats.size === 'number') {
-      metadata.fileSize = stats.size;
-    }
+async generatePptxFallbackResult(filePath, reason, error) {
+  let stats;
+  try {
+    stats = await fs.stat(filePath);
+  } catch (statError) {
+    stats = null;
+  }
 
-    if (error && error.message) {
-      metadata.error = error.message;
-    }
+  const metadata = {
+    parser: 'pptx_fallback',
+    fallback: true,
+    reason,
+    fileName: path.basename(filePath)
+  };
 
-    return {
-      text: '',
-      slides: [],
-      structure: {
-        hasStructure: false,
-        slideCount: 0,
-        hasNotes: false,
-        slideOrder: []
-      },
-      metadata
-    };
-  }  /**
+  if (stats && typeof stats.size === 'number') {
+    metadata.fileSize = stats.size;
+  }
+
+  if (error && error.message) {
+    metadata.error = error.message;
+  }
+
+  return {
+    text: '',
+    slides: [],
+    structure: {
+      hasStructure: false,
+      slideCount: 0,
+      hasNotes: false,
+      slideOrder: []
+    },
+    metadata
+  };
+}
+  /**
    * Process Excel documents
    * @param {string} filePath - Path to XLSX file
    * @param {Object} options - Processing options

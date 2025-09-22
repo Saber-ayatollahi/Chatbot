@@ -8,6 +8,7 @@ const router = express.Router();
 const path = require('path');
 const fs = require('fs-extra');
 const crypto = require('crypto');
+const { getConfig } = require('../config/environment');
 
 // Try to load multer, fallback if not available
 let multer;
@@ -28,6 +29,7 @@ class IngestionRoutes {
     this.advancedProcessor = new ComprehensiveEnhancedIngestionService();
     this.initialized = false;
     this.db = null;
+    this.knowledgeBaseRoot = path.resolve(path.join(process.cwd(), 'knowledge_base'));
     
     // Configure multer for file uploads if available
     if (multer) {
@@ -196,6 +198,78 @@ class IngestionRoutes {
   }
 
   /**
+   * Ensure a path stays within the knowledge base root
+   * @param {string} targetPath - The path to validate
+   * @returns {boolean} True if the path is within the knowledge base
+   */
+  isPathWithinKnowledgeBase(targetPath) {
+    const base = this.knowledgeBaseRoot;
+    const relative = path.relative(base, targetPath);
+    return relative === '' || (!relative.startsWith('..') && !path.isAbsolute(relative));
+  }
+
+  /**
+   * Resolve and validate a file path for ingestion operations
+   * @param {string} filePath - Original file path provided by the client
+   * @returns {Promise<string>} Resolved absolute path within the knowledge base
+   */
+  async resolveIngestionFilePath(filePath) {
+    if (!filePath || typeof filePath !== 'string') {
+      throw new Error('Invalid file path provided');
+    }
+
+    const resolvedPath = path.resolve(filePath);
+
+    if (!this.isPathWithinKnowledgeBase(resolvedPath)) {
+      throw new Error(`File path is outside of the knowledge base directory: ${filePath}`);
+    }
+
+    const exists = await fs.pathExists(resolvedPath);
+    if (!exists) {
+      throw new Error(`File not found: ${filePath}`);
+    }
+
+    const realPath = await fs.realpath(resolvedPath);
+
+    if (!this.isPathWithinKnowledgeBase(realPath)) {
+      throw new Error(`Resolved path escapes knowledge base directory: ${filePath}`);
+    }
+
+    return realPath;
+  }
+
+  /**
+   * Apply confidence threshold overrides to runtime configuration
+   * @param {number|string} threshold - Threshold value between 0 and 1
+   * @returns {number|undefined} Sanitized threshold value
+   */
+  applyConfidenceThresholdOverride(threshold) {
+    if (threshold === undefined || threshold === null) {
+      return undefined;
+    }
+
+    const numericThreshold = Number(threshold);
+    if (Number.isNaN(numericThreshold)) {
+      throw new Error('confidenceThreshold must be a valid number');
+    }
+
+    const clamped = Math.max(0, Math.min(1, numericThreshold));
+
+    try {
+      const config = getConfig();
+      if (typeof config.set === 'function') {
+        config.set('rag.response.confidenceThreshold', clamped);
+        config.set('rag.confidence.minimumThreshold', clamped);
+      }
+      logger.info(`Applied confidence threshold override: ${clamped}`);
+    } catch (error) {
+      logger.warn('Failed to update runtime confidence threshold:', error.message);
+    }
+
+    return clamped;
+  }
+
+  /**
    * Validate file upload
    */
   validateUpload(req, res, next) {
@@ -269,8 +343,10 @@ class IngestionRoutes {
 
       logger.info(`Starting advanced processing: ${sourceId}`);
 
+      const safeFilePath = await this.resolveIngestionFilePath(filePath);
+
       const result = await this.pipeline.ingestDocumentAdvanced(
-        filePath,
+        safeFilePath,
         sourceId,
         version,
         config
@@ -302,8 +378,10 @@ class IngestionRoutes {
 
       logger.info(`Starting standard processing: ${sourceId}`);
 
+      const safeFilePath = await this.resolveIngestionFilePath(filePath);
+
       const result = await this.pipeline.ingestDocument(
-        filePath,
+        safeFilePath,
         sourceId,
         version,
         options
@@ -331,21 +409,29 @@ class IngestionRoutes {
   async handleBatchProcessing(req, res) {
     try {
       const { documents, config = { method: 'advanced' } } = req.body;
-      
+
+      const normalizedConfig = { ...config };
+
       // Ensure we always use the advanced method by default
-      if (!config.method) {
-        config.method = 'advanced';
-      }
-      
-      // Apply confidence threshold if provided
-      if (config.confidenceThreshold !== undefined) {
-        process.env.CONFIDENCE_THRESHOLD = config.confidenceThreshold.toString();
-        logger.info(`Applied confidence threshold: ${config.confidenceThreshold}`);
+      if (!normalizedConfig.method) {
+        normalizedConfig.method = 'advanced';
       }
 
-      logger.info(`Starting batch processing: ${documents.length} documents`);
+      if (normalizedConfig.confidenceThreshold !== undefined) {
+        normalizedConfig.confidenceThreshold = this.applyConfidenceThresholdOverride(
+          normalizedConfig.confidenceThreshold
+        );
+      }
 
-      const result = await this.pipeline.ingestDocumentBatch(documents, config);
+      const sanitizedDocuments = [];
+      for (const document of documents) {
+        const safeFilePath = await this.resolveIngestionFilePath(document.filePath);
+        sanitizedDocuments.push({ ...document, filePath: safeFilePath });
+      }
+
+      logger.info(`Starting batch processing: ${sanitizedDocuments.length} documents`);
+
+      const result = await this.pipeline.ingestDocumentBatch(sanitizedDocuments, normalizedConfig);
 
       res.json({
         success: true,
@@ -686,18 +772,20 @@ class IngestionRoutes {
   async handleFileIngestion(req, res) {
     try {
       const { files, config = { method: 'advanced' } } = req.body;
-      
+
+      const normalizedConfig = { ...config };
+
       // Ensure we always use the advanced method by default
-      if (!config.method) {
-        config.method = 'advanced';
+      if (!normalizedConfig.method) {
+        normalizedConfig.method = 'advanced';
       }
-      
-      // Apply confidence threshold if provided
-      if (config.confidenceThreshold !== undefined) {
-        process.env.CONFIDENCE_THRESHOLD = config.confidenceThreshold.toString();
-        logger.info(`Applied confidence threshold: ${config.confidenceThreshold}`);
+
+      if (normalizedConfig.confidenceThreshold !== undefined) {
+        normalizedConfig.confidenceThreshold = this.applyConfidenceThresholdOverride(
+          normalizedConfig.confidenceThreshold
+        );
       }
-      
+
       const results = [];
       const archivesDir = path.join(process.cwd(), 'knowledge_base', 'archives');
       
@@ -708,14 +796,13 @@ class IngestionRoutes {
 
       for (const fileInfo of files) {
         const { filePath } = fileInfo;
-        const filename = path.basename(filePath);
+        let safeFilePath;
+        let filename;
         const sourceId = `source_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-        
+
         try {
-          // Check if file exists
-          if (!await fs.pathExists(filePath)) {
-            throw new Error(`File not found: ${filePath}`);
-          }
+          safeFilePath = await this.resolveIngestionFilePath(filePath);
+          filename = path.basename(safeFilePath);
 
           // Check if file is already processed by filename
           const existingFileQuery = 'SELECT source_id, processing_status FROM kb_sources WHERE filename = $1';
@@ -729,28 +816,28 @@ class IngestionRoutes {
           }
 
           // Get file stats for source record
-          const stats = await fs.stat(filePath);
-          const fileBuffer = await fs.readFile(filePath);
+          const stats = await fs.stat(safeFilePath);
+          const fileBuffer = await fs.readFile(safeFilePath);
           const fileHash = crypto.createHash('sha256').update(fileBuffer).digest('hex');
-          
+
           // Create document source record first using the existing database connection
-          await this.createSourceRecord(sourceId, filename, filePath, stats.size, fileHash);
+          await this.createSourceRecord(sourceId, filename, safeFilePath, stats.size, fileHash);
 
           // Start processing based on method
           let processingResult;
-          if (config.method === 'advanced') {
+          if (normalizedConfig.method === 'advanced') {
             processingResult = await this.pipeline.ingestDocumentAdvanced(
-              filePath,
+              safeFilePath,
               sourceId,
               '1.0',
-              config
+              normalizedConfig
             );
           } else {
             processingResult = await this.pipeline.ingestDocument(
-              filePath,
+              safeFilePath,
               sourceId,
               '1.0',
-              config
+              normalizedConfig
             );
           }
 
@@ -770,18 +857,18 @@ class IngestionRoutes {
               const archivedFilename = `${nameWithoutExt}_${sourceId}_${timestamp}${ext}`;
               finalArchivePath = path.join(archivesDir, archivedFilename);
               
-              await fs.copy(filePath, finalArchivePath);
-              
+              await fs.copy(safeFilePath, finalArchivePath);
+
               logger.info(`✅ Successfully processed and archived: ${filename} -> ${archivedFilename} (${actualChunks} chunks stored, original preserved)`);
             } else {
               throw new Error(`No chunks found in database for source ${sourceId}`);
             }
-            
+
             results.push({
               filename,
               sourceId,
               status: 'success',
-              originalPath: filePath,
+              originalPath: safeFilePath,
               archivedPath: finalArchivePath,
               processingResult,
               jobId: processingResult.jobId || null
@@ -798,7 +885,7 @@ class IngestionRoutes {
             filename,
             sourceId,
             status: 'error',
-            originalPath: filePath,
+            originalPath: safeFilePath || filePath,
             error: error.message
           });
         }

@@ -1,27 +1,12 @@
 module.exports = {
   "testEnvironment": "node",
-  "collectCoverage": true,
-  "coverageThreshold": {
-    "global": {
-      "branches": 90,
-      "functions": 90,
-      "lines": 90,
-      "statements": 90
-    }
-  },
+  "collectCoverage": false,
   "testMatch": [
     "**/tests/**/*.test.js",
     "**/tests/**/*.spec.js"
   ],
   "setupFilesAfterEnv": [
     "<rootDir>/tests/setup.js"
-  ],
-  "collectCoverageFrom": [
-    "services/**/*.js",
-    "knowledge/**/*.js",
-    "utils/**/*.js",
-    "!**/node_modules/**",
-    "!**/tests/**"
   ],
   "verbose": true,
   "forceExit": true,

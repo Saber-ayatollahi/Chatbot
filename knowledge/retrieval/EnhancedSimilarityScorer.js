@@ -34,12 +34,12 @@ class EnhancedSimilarityScorer {
     this.contentTypeModifiers = {
       // For procedural queries (how to create fund)
       procedure: {
-        instructions: 1.5,        // Major boost for instruction content
+        instructions: 2.5,        // MASSIVE boost for instruction content
         examples: 1.2,            // Boost for examples
         definitions: 0.8,         // Slight penalty for definitions
-        tableOfContents: 0.2,     // Major penalty for TOC
+        tableOfContents: 0.1,     // SEVERE penalty for TOC
         faq: 1.0,                 // Neutral for FAQ
-        text: 0.9                 // Slight penalty for generic text
+        text: 0.7                 // Penalty for generic text
       },
       
       // For definition queries (what is X)

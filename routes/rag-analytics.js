@@ -5,26 +5,26 @@
 
 const express = require('express');
 const router = express.Router();
-const { Pool } = require('pg');
 const logger = require('../utils/logger');
+const { getDatabase } = require('../config/database');
 
 class RAGAnalyticsRoutes {
   constructor() {
-    this.pool = new Pool({
-      user: process.env.DB_USER || 'postgres',
-      host: process.env.DB_HOST || 'localhost',
-      database: process.env.DB_NAME || 'fund_management_chatbot',
-      password: process.env.DB_PASSWORD || 'postgres',
-      port: process.env.DB_PORT || 5432,
-    });
+    this.db = null;
     this.initialized = false;
   }
 
   /**
    * Initialize RAG analytics routes
    */
-  async initialize() {
+  async initialize(database = null) {
     try {
+      if (database) {
+        this.db = database;
+      } else {
+        this.db = getDatabase();
+      }
+
       this.setupRoutes();
       this.initialized = true;
       logger.info('RAG Analytics Routes initialized successfully');
@@ -65,63 +65,58 @@ class RAGAnalyticsRoutes {
    */
   async getRAGOverview(req, res) {
     try {
-      const client = await this.pool.connect();
-      
-      try {
-        // Get basic counts
-        const documentsQuery = 'SELECT COUNT(*) as count FROM kb_sources WHERE processing_status = $1';
-        const chunksQuery = 'SELECT COUNT(*) as count FROM kb_chunks';
-        const embeddingsQuery = 'SELECT COUNT(*) as count FROM kb_chunks WHERE embedding IS NOT NULL';
-        const jobsQuery = 'SELECT COUNT(*) as count FROM ingestion_jobs WHERE job_status = $1';
-        
-        const [documentsResult, chunksResult, embeddingsResult, completedJobsResult] = await Promise.all([
-          client.query(documentsQuery, ['completed']),
-          client.query(chunksQuery),
-          client.query(embeddingsQuery),
-          client.query(jobsQuery, ['completed'])
-        ]);
+      const db = this.ensureDatabase();
 
-        // Get storage information
-        const storageQuery = `
-          SELECT 
-            pg_size_pretty(pg_total_relation_size('kb_chunks')) as chunks_size,
-            pg_size_pretty(pg_total_relation_size('kb_sources')) as sources_size,
-            pg_size_pretty(pg_database_size(current_database())) as total_db_size
-        `;
-        const storageResult = await client.query(storageQuery);
+      // Get basic counts
+      const documentsQuery = 'SELECT COUNT(*) as count FROM kb_sources WHERE processing_status = $1';
+      const chunksQuery = 'SELECT COUNT(*) as count FROM kb_chunks';
+      const embeddingsQuery = 'SELECT COUNT(*) as count FROM kb_chunks WHERE embedding IS NOT NULL';
+      const jobsQuery = 'SELECT COUNT(*) as count FROM ingestion_jobs WHERE job_status = $1';
 
-        // Get recent activity
-        const recentActivityQuery = `
-          SELECT 
-            COUNT(*) as recent_jobs,
-            AVG(EXTRACT(EPOCH FROM (updated_at - created_at))) as avg_processing_time
-          FROM ingestion_jobs 
-          WHERE created_at > NOW() - INTERVAL '24 hours'
-            AND job_status = 'completed'
-        `;
-        const recentActivityResult = await client.query(recentActivityQuery);
+      const [documentsResult, chunksResult, embeddingsResult, completedJobsResult] = await Promise.all([
+        db.query(documentsQuery, ['completed']),
+        db.query(chunksQuery),
+        db.query(embeddingsQuery),
+        db.query(jobsQuery, ['completed'])
+      ]);
 
-        const overview = {
-          totalDocuments: parseInt(documentsResult.rows[0].count),
-          totalChunks: parseInt(chunksResult.rows[0].count),
-          totalEmbeddings: parseInt(embeddingsResult.rows[0].count),
-          completedJobs: parseInt(completedJobsResult.rows[0].count),
-          storage: storageResult.rows[0],
-          recentActivity: {
-            jobsLast24h: parseInt(recentActivityResult.rows[0].recent_jobs || 0),
-            avgProcessingTime: parseFloat(recentActivityResult.rows[0].avg_processing_time || 0)
-          },
-          lastUpdated: new Date().toISOString()
-        };
+      // Get storage information
+      const storageQuery = `
+        SELECT
+          pg_size_pretty(pg_total_relation_size('kb_chunks')) as chunks_size,
+          pg_size_pretty(pg_total_relation_size('kb_sources')) as sources_size,
+          pg_size_pretty(pg_database_size(current_database())) as total_db_size
+      `;
+      const storageResult = await db.query(storageQuery);
 
-        res.json({
-          success: true,
-          data: overview
-        });
+      // Get recent activity
+      const recentActivityQuery = `
+        SELECT
+          COUNT(*) as recent_jobs,
+          AVG(EXTRACT(EPOCH FROM (updated_at - created_at))) as avg_processing_time
+        FROM ingestion_jobs
+        WHERE created_at > NOW() - INTERVAL '24 hours'
+          AND job_status = 'completed'
+      `;
+      const recentActivityResult = await db.query(recentActivityQuery);
 
-      } finally {
-        client.release();
-      }
+      const overview = {
+        totalDocuments: parseInt(documentsResult.rows[0].count),
+        totalChunks: parseInt(chunksResult.rows[0].count),
+        totalEmbeddings: parseInt(embeddingsResult.rows[0].count),
+        completedJobs: parseInt(completedJobsResult.rows[0].count),
+        storage: storageResult.rows[0],
+        recentActivity: {
+          jobsLast24h: parseInt(recentActivityResult.rows[0].recent_jobs || 0),
+          avgProcessingTime: parseFloat(recentActivityResult.rows[0].avg_processing_time || 0)
+        },
+        lastUpdated: new Date().toISOString()
+      };
+
+      res.json({
+        success: true,
+        data: overview
+      });
 
     } catch (error) {
       logger.error('Failed to get RAG overview:', error);
@@ -138,57 +133,52 @@ class RAGAnalyticsRoutes {
    */
   async getEmbeddingStats(req, res) {
     try {
-      const client = await this.pool.connect();
-      
-      try {
-        // Get embedding dimensions and model info
-        const dimensionsQuery = `
-          SELECT 
-            'text-embedding-3-large' as embedding_model,
-            3072 as dimensions,
-            COUNT(*) as count,
-            AVG(quality_score) as avg_quality
-          FROM kb_chunks 
-          WHERE embedding IS NOT NULL
-        `;
-        const dimensionsResult = await client.query(dimensionsQuery);
+      const db = this.ensureDatabase();
 
-        // Get embedding types distribution
-        const typesQuery = `
-          SELECT 
-            'content' as embedding_type,
-            COUNT(*) as count,
-            AVG(0.85) as avg_quality
-          FROM kb_chunks 
-          WHERE embedding IS NOT NULL
-        `;
-        const typesResult = await client.query(typesQuery);
+      // Get embedding dimensions and model info
+      const dimensionsQuery = `
+        SELECT
+          'text-embedding-3-large' as embedding_model,
+          3072 as dimensions,
+          COUNT(*) as count,
+          AVG(quality_score) as avg_quality
+        FROM kb_chunks
+        WHERE embedding IS NOT NULL
+      `;
+      const dimensionsResult = await db.query(dimensionsQuery);
 
-        // Get quality distribution (simulated since we don't have quality scores)
-        const qualityQuery = `
-          SELECT 
-            'Good (0.8-0.9)' as quality_range,
-            COUNT(*) as count
-          FROM kb_chunks 
-          WHERE embedding IS NOT NULL
-        `;
-        const qualityResult = await client.query(qualityQuery);
+      // Get embedding types distribution
+      const typesQuery = `
+        SELECT
+          'content' as embedding_type,
+          COUNT(*) as count,
+          AVG(0.85) as avg_quality
+        FROM kb_chunks
+        WHERE embedding IS NOT NULL
+      `;
+      const typesResult = await db.query(typesQuery);
 
-        const stats = {
-          byModel: dimensionsResult.rows,
-          byType: typesResult.rows,
-          qualityDistribution: qualityResult.rows,
-          lastUpdated: new Date().toISOString()
-        };
+      // Get quality distribution (simulated since we don't have quality scores)
+      const qualityQuery = `
+        SELECT
+          'Good (0.8-0.9)' as quality_range,
+          COUNT(*) as count
+        FROM kb_chunks
+        WHERE embedding IS NOT NULL
+      `;
+      const qualityResult = await db.query(qualityQuery);
 
-        res.json({
-          success: true,
-          data: stats
-        });
+      const stats = {
+        byModel: dimensionsResult.rows,
+        byType: typesResult.rows,
+        qualityDistribution: qualityResult.rows,
+        lastUpdated: new Date().toISOString()
+      };
 
-      } finally {
-        client.release();
-      }
+      res.json({
+        success: true,
+        data: stats
+      });
 
     } catch (error) {
       logger.error('Failed to get embedding stats:', error);
@@ -205,72 +195,67 @@ class RAGAnalyticsRoutes {
    */
   async getChunkAnalytics(req, res) {
     try {
-      const client = await this.pool.connect();
-      
-      try {
-        // Get chunk size distribution
-        const sizeQuery = `
-          SELECT 
-            CASE 
-              WHEN LENGTH(content) < 100 THEN 'Very Small (<100)'
-              WHEN LENGTH(content) < 500 THEN 'Small (100-500)'
-              WHEN LENGTH(content) < 1000 THEN 'Medium (500-1000)'
-              WHEN LENGTH(content) < 2000 THEN 'Large (1000-2000)'
-              ELSE 'Very Large (2000+)'
-            END as size_range,
-            COUNT(*) as count,
-            AVG(LENGTH(content)) as avg_length
-          FROM kb_chunks 
-          GROUP BY size_range
-          ORDER BY MIN(LENGTH(content))
-        `;
-        const sizeResult = await client.query(sizeQuery);
+      const db = this.ensureDatabase();
 
-        // Get chunk types and hierarchical info
-        const hierarchyQuery = `
-          SELECT 
-            'content' as chunk_type,
-            COUNT(*) as count,
-            0 as has_parent,
-            1 as avg_level
-          FROM kb_chunks
-        `;
-        const hierarchyResult = await client.query(hierarchyQuery);
+      // Get chunk size distribution
+      const sizeQuery = `
+        SELECT
+          CASE
+            WHEN LENGTH(content) < 100 THEN 'Very Small (<100)'
+            WHEN LENGTH(content) < 500 THEN 'Small (100-500)'
+            WHEN LENGTH(content) < 1000 THEN 'Medium (500-1000)'
+            WHEN LENGTH(content) < 2000 THEN 'Large (1000-2000)'
+            ELSE 'Very Large (2000+)'
+          END as size_range,
+          COUNT(*) as count,
+          AVG(LENGTH(content)) as avg_length
+        FROM kb_chunks
+        GROUP BY size_range
+        ORDER BY MIN(LENGTH(content))
+      `;
+      const sizeResult = await db.query(sizeQuery);
 
-        // Get processing method distribution from actual ingestion jobs
-        const methodQuery = `
-          SELECT 
-            COALESCE(ij.configuration->>'method', 'unknown') as processing_method,
-            COUNT(DISTINCT c.chunk_id) as count,
-            AVG(c.quality_score) as avg_quality,
-            AVG(LENGTH(c.content)) as avg_length
-          FROM kb_chunks c
-          JOIN kb_sources s ON c.source_id = s.source_id
-          LEFT JOIN LATERAL (
-            SELECT DISTINCT ON (source_id) configuration
-            FROM ingestion_jobs 
-            WHERE source_id = s.source_id AND job_status = 'completed'
-            ORDER BY source_id, completed_at DESC
-          ) ij ON true
-          GROUP BY COALESCE(ij.configuration->>'method', 'unknown')
-        `;
-        const methodResult = await client.query(methodQuery);
+      // Get chunk types and hierarchical info
+      const hierarchyQuery = `
+        SELECT
+          'content' as chunk_type,
+          COUNT(*) as count,
+          0 as has_parent,
+          1 as avg_level
+        FROM kb_chunks
+      `;
+      const hierarchyResult = await db.query(hierarchyQuery);
 
-        const analytics = {
-          sizeDistribution: sizeResult.rows,
-          hierarchicalInfo: hierarchyResult.rows,
-          processingMethods: methodResult.rows,
-          lastUpdated: new Date().toISOString()
-        };
+      // Get processing method distribution from actual ingestion jobs
+      const methodQuery = `
+        SELECT
+          COALESCE(ij.configuration->>'method', 'unknown') as processing_method,
+          COUNT(DISTINCT c.chunk_id) as count,
+          AVG(c.quality_score) as avg_quality,
+          AVG(LENGTH(c.content)) as avg_length
+        FROM kb_chunks c
+        JOIN kb_sources s ON c.source_id = s.source_id
+        LEFT JOIN LATERAL (
+          SELECT DISTINCT ON (source_id) configuration
+          FROM ingestion_jobs
+          WHERE source_id = s.source_id AND job_status = 'completed'
+          ORDER BY source_id, completed_at DESC
+        ) ij ON true
+        GROUP BY COALESCE(ij.configuration->>'method', 'unknown')
+      `;
+      const methodResult = await db.query(methodQuery);
 
-        res.json({
-          success: true,
-          data: analytics
-        });
+      const analytics = {
+        sizeDistribution: sizeResult.rows,
+        hierarchicalInfo: hierarchyResult.rows,
+        processingMethods: methodResult.rows,
+        lastUpdated: new Date().toISOString()
+      };
 
-      } finally {
-        client.release();
-      }
+      res.json({
+        success: true,
+        data: analytics
+      });
 
     } catch (error) {
       logger.error('Failed to get chunk analytics:', error);
@@ -287,61 +272,55 @@ class RAGAnalyticsRoutes {
    */
   async getProcessingHistory(req, res) {
     try {
-      const client = await this.pool.connect();
-      
-      try {
-        const limit = parseInt(req.query.limit) || 50;
-        
-        // Get recent processing jobs with details
-        const historyQuery = `
-          SELECT 
-            ij.job_id,
-            ij.source_id,
-            ks.filename,
-            ij.job_status,
-            COALESCE(ij.configuration->>'method', 'unknown') as processing_method,
-            ij.created_at as started_at,
-            ij.completed_at as completed_at,
-            ij.chunks_processed,
-            ij.processing_stats,
-            ij.configuration as config_used,
-            EXTRACT(EPOCH FROM (ij.updated_at - ij.created_at)) as processing_time_seconds
-          FROM ingestion_jobs ij
-          LEFT JOIN kb_sources ks ON ij.source_id = ks.source_id
-          ORDER BY ij.created_at DESC
-          LIMIT $1
-        `;
-        const historyResult = await client.query(historyQuery, [limit]);
+      const db = this.ensureDatabase();
+      const limit = parseInt(req.query.limit) || 50;
 
-        // Get processing statistics by method
-        const methodStatsQuery = `
-          SELECT 
-            COALESCE(configuration->>'method', 'unknown') as processing_method,
-            COUNT(*) as total_jobs,
-            COUNT(CASE WHEN job_status = 'completed' THEN 1 END) as successful_jobs,
-            COUNT(CASE WHEN job_status = 'failed' THEN 1 END) as failed_jobs,
-            AVG(CASE WHEN job_status = 'completed' THEN chunks_processed END) as avg_chunks,
-            AVG(CASE WHEN job_status = 'completed' THEN EXTRACT(EPOCH FROM (completed_at - started_at)) END) as avg_time_seconds
-          FROM ingestion_jobs
-          WHERE created_at > NOW() - INTERVAL '30 days'
-          GROUP BY COALESCE(configuration->>'method', 'unknown')
-        `;
-        const methodStatsResult = await client.query(methodStatsQuery);
+      // Get recent processing jobs with details
+      const historyQuery = `
+        SELECT
+          ij.job_id,
+          ij.source_id,
+          ks.filename,
+          ij.job_status,
+          COALESCE(ij.configuration->>'method', 'unknown') as processing_method,
+          ij.created_at as started_at,
+          ij.completed_at as completed_at,
+          ij.chunks_processed,
+          ij.processing_stats,
+          ij.configuration as config_used,
+          EXTRACT(EPOCH FROM (ij.updated_at - ij.created_at)) as processing_time_seconds
+        FROM ingestion_jobs ij
+        LEFT JOIN kb_sources ks ON ij.source_id = ks.source_id
+        ORDER BY ij.created_at DESC
+        LIMIT $1
+      `;
+      const historyResult = await db.query(historyQuery, [limit]);
 
-        const history = {
-          recentJobs: historyResult.rows,
-          methodStatistics: methodStatsResult.rows,
-          lastUpdated: new Date().toISOString()
-        };
+      // Get processing statistics by method
+      const methodStatsQuery = `
+        SELECT
+          COALESCE(configuration->>'method', 'unknown') as processing_method,
+          COUNT(*) as total_jobs,
+          COUNT(CASE WHEN job_status = 'completed' THEN 1 END) as successful_jobs,
+          COUNT(CASE WHEN job_status = 'failed' THEN 1 END) as failed_jobs,
+          AVG(CASE WHEN job_status = 'completed' THEN chunks_processed END) as avg_chunks,
+          AVG(CASE WHEN job_status = 'completed' THEN EXTRACT(EPOCH FROM (completed_at - started_at)) END) as avg_time_seconds
+        FROM ingestion_jobs
+        WHERE created_at > NOW() - INTERVAL '30 days'
+        GROUP BY COALESCE(configuration->>'method', 'unknown')
+      `;
+      const methodStatsResult = await db.query(methodStatsQuery);
 
-        res.json({
-          success: true,
-          data: history
-        });
+      const history = {
+        recentJobs: historyResult.rows,
+        methodStatistics: methodStatsResult.rows,
+        lastUpdated: new Date().toISOString()
+      };
 
-      } finally {
-        client.release();
-      }
+      res.json({
+        success: true,
+        data: history
+      });
 
     } catch (error) {
       logger.error('Failed to get processing history:', error);
@@ -358,54 +337,49 @@ class RAGAnalyticsRoutes {
    */
   async getModelInfo(req, res) {
     try {
-      const client = await this.pool.connect();
-      
-      try {
-        // Get embedding models in use
-        const modelsQuery = `
-          SELECT 
-            'text-embedding-3-large' as embedding_model,
-            COUNT(*) as embeddings_count,
-            3072 as dimensions,
-            MIN(created_at) as first_used,
-            MAX(updated_at) as last_used,
-            AVG(quality_score) as avg_quality
-          FROM kb_chunks 
-          WHERE embedding IS NOT NULL
-        `;
-        const modelsResult = await client.query(modelsQuery);
+      const db = this.ensureDatabase();
 
-        // Get configuration usage (simulated since we don't have detailed config tracking)
-        const configQuery = `
-          SELECT 
-            'false' as hierarchical_chunking,
-            'false' as multi_scale_embeddings,
-            'false' as advanced_retrieval,
-            'true' as quality_validation,
-            COUNT(*) as usage_count
-          FROM ingestion_jobs 
-          WHERE created_at > NOW() - INTERVAL '30 days'
-        `;
-        const configResult = await client.query(configQuery);
+      // Get embedding models in use
+      const modelsQuery = `
+        SELECT
+          'text-embedding-3-large' as embedding_model,
+          COUNT(*) as embeddings_count,
+          3072 as dimensions,
+          MIN(created_at) as first_used,
+          MAX(updated_at) as last_used,
+          AVG(quality_score) as avg_quality
+        FROM kb_chunks
+        WHERE embedding IS NOT NULL
+      `;
+      const modelsResult = await db.query(modelsQuery);
 
-        const modelInfo = {
-          embeddingModels: modelsResult.rows,
-          configurationUsage: configResult.rows,
-          systemInfo: {
-            databaseVersion: await this.getDatabaseVersion(client),
-            pgvectorVersion: await this.getPgVectorVersion(client)
-          },
-          lastUpdated: new Date().toISOString()
-        };
+      // Get configuration usage (simulated since we don't have detailed config tracking)
+      const configQuery = `
+        SELECT
+          'false' as hierarchical_chunking,
+          'false' as multi_scale_embeddings,
+          'false' as advanced_retrieval,
+          'true' as quality_validation,
+          COUNT(*) as usage_count
+        FROM ingestion_jobs
+        WHERE created_at > NOW() - INTERVAL '30 days'
+      `;
+      const configResult = await db.query(configQuery);
 
-        res.json({
-          success: true,
-          data: modelInfo
-        });
+      const modelInfo = {
+        embeddingModels: modelsResult.rows,
+        configurationUsage: configResult.rows,
+        systemInfo: {
+          databaseVersion: await this.getDatabaseVersion(),
+          pgvectorVersion: await this.getPgVectorVersion()
+        },
+        lastUpdated: new Date().toISOString()
+      };
 
-      } finally {
-        client.release();
-      }
+      res.json({
+        success: true,
+        data: modelInfo
+      });
 
     } catch (error) {
       logger.error('Failed to get model info:', error);
@@ -457,59 +431,54 @@ class RAGAnalyticsRoutes {
    */
   async getQualityMetrics(req, res) {
     try {
-      const client = await this.pool.connect();
-      
-      try {
-        // Get overall quality scores (simulated)
-        const qualityQuery = `
-          SELECT 
-            'chunks' as type,
-            COUNT(*) as total_count,
-            0.85 as avg_score,
-            0.70 as min_score,
-            0.95 as max_score,
-            0.85 as median_score
-          FROM kb_chunks 
-          UNION ALL
-          SELECT 
-            'embeddings' as type,
-            COUNT(*) as total_count,
-            0.85 as avg_score,
-            0.70 as min_score,
-            0.95 as max_score,
-            0.85 as median_score
-          FROM kb_chunks 
-          WHERE embedding IS NOT NULL
-        `;
-        const qualityResult = await client.query(qualityQuery);
+      const db = this.ensureDatabase();
 
-        // Get quality trends over time (simulated)
-        const trendsQuery = `
-          SELECT 
-            DATE_TRUNC('day', created_at) as date,
-            0.85 as avg_quality,
-            COUNT(*) as count
-          FROM kb_chunks 
-          WHERE created_at > NOW() - INTERVAL '30 days'
-          GROUP BY DATE_TRUNC('day', created_at)
-          ORDER BY date DESC
-        `;
-        const trendsResult = await client.query(trendsQuery);
+      // Get overall quality scores (simulated)
+      const qualityQuery = `
+        SELECT
+          'chunks' as type,
+          COUNT(*) as total_count,
+          0.85 as avg_score,
+          0.70 as min_score,
+          0.95 as max_score,
+          0.85 as median_score
+        FROM kb_chunks
+        UNION ALL
+        SELECT
+          'embeddings' as type,
+          COUNT(*) as total_count,
+          0.85 as avg_score,
+          0.70 as min_score,
+          0.95 as max_score,
+          0.85 as median_score
+        FROM kb_chunks
+        WHERE embedding IS NOT NULL
+      `;
+      const qualityResult = await db.query(qualityQuery);
 
-        const metrics = {
-          overallQuality: qualityResult.rows,
-          qualityTrends: trendsResult.rows,
-          lastUpdated: new Date().toISOString()
-        };
+      // Get quality trends over time (simulated)
+      const trendsQuery = `
+        SELECT
+          DATE_TRUNC('day', created_at) as date,
+          0.85 as avg_quality,
+          COUNT(*) as count
+        FROM kb_chunks
+        WHERE created_at > NOW() - INTERVAL '30 days'
+        GROUP BY DATE_TRUNC('day', created_at)
+        ORDER BY date DESC
+      `;
+      const trendsResult = await db.query(trendsQuery);
 
-        res.json({
-          success: true,
-          data: metrics
-        });
+      const metrics = {
+        overallQuality: qualityResult.rows,
+        qualityTrends: trendsResult.rows,
+        lastUpdated: new Date().toISOString()
+      };
 
-      } finally {
-        client.release();
-      }
+      res.json({
+        success: true,
+        data: metrics
+      });
 
     } catch (error) {
       logger.error('Failed to get quality metrics:', error);
@@ -524,10 +493,11 @@ class RAGAnalyticsRoutes {
   /**
    * Get database version
    */
-  async getDatabaseVersion(client) {
+  async getDatabaseVersion() {
     try {
-      const result = await client.query('SELECT version()');
-      return result.rows[0].version;
+      const db = this.ensureDatabase();
+      const result = await db.query('SELECT version()');
+      return result.rows[0]?.version || 'Unknown';
     } catch (error) {
       return 'Unknown';
     }
@@ -536,13 +506,24 @@ class RAGAnalyticsRoutes {
   /**
    * Get pgvector version
    */
-  async getPgVectorVersion(client) {
+  async getPgVectorVersion() {
     try {
-      const result = await client.query("SELECT extversion FROM pg_extension WHERE extname = 'vector'");
+      const db = this.ensureDatabase();
+      const result = await db.query("SELECT extversion FROM pg_extension WHERE extname = 'vector'");
       return result.rows[0]?.extversion || 'Not installed';
     } catch (error) {
       return 'Unknown';
     }
+  }
+
+  /**
+   * Ensure database instance is available
+   */
+  ensureDatabase() {
+    if (!this.db) {
+      this.db = getDatabase();
+    }
+    return this.db;
   }
 
   /**
@@ -559,6 +540,6 @@ const ragAnalyticsRoutes = new RAGAnalyticsRoutes();
 module.exports = {
   RAGAnalyticsRoutes,
   router,
-  initialize: () => ragAnalyticsRoutes.initialize(),
+  initialize: (database) => ragAnalyticsRoutes.initialize(database),
   getRouter: () => ragAnalyticsRoutes.getRouter()
 };

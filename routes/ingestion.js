@@ -1021,46 +1021,37 @@ class IngestionRoutes {
    * Create source record in database
    */
   async createSourceRecord(sourceId, filename, filePath, fileSize, fileHash) {
-    const { Pool } = require('pg');
-    const pool = new Pool({
-      user: process.env.DB_USER || 'postgres',
-      host: process.env.DB_HOST || 'localhost',
-      database: process.env.DB_NAME || 'fund_management_chatbot',
-      password: process.env.DB_PASSWORD || 'postgres',
-      port: process.env.DB_PORT || 5432,
-    });
+    const db = this.db || require('../config/database').getDatabase();
 
-    const client = await pool.connect();
-    try {
-      // Insert source record
-      const sourceQuery = `
-        INSERT INTO kb_sources (
-          source_id, filename, file_path, file_size, file_hash, version, 
-          document_type, processing_status, created_at, updated_at
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW(), NOW())
-        ON CONFLICT (source_id) DO UPDATE SET
-          file_path = EXCLUDED.file_path,
-          file_size = EXCLUDED.file_size,
-          file_hash = EXCLUDED.file_hash,
-          processing_status = 'pending',
-          updated_at = NOW()
-      `;
-      
-      const ext = path.extname(filename).substring(1).toLowerCase();
-      await client.query(sourceQuery, [
-        sourceId,
-        filename,
-        filePath,
-        fileSize,
-        fileHash,
-        '1.0',
-        ext,
-        'pending'
-      ]);
-    } finally {
-      client.release();
-      await pool.end();
+    if (!db || typeof db.query !== 'function') {
+      throw new Error('Database instance not initialized');
     }
+
+    // Insert or update source metadata using shared database configuration
+    const sourceQuery = `
+      INSERT INTO kb_sources (
+        source_id, filename, file_path, file_size, file_hash, version,
+        document_type, processing_status, created_at, updated_at
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW(), NOW())
+      ON CONFLICT (source_id) DO UPDATE SET
+        file_path = EXCLUDED.file_path,
+        file_size = EXCLUDED.file_size,
+        file_hash = EXCLUDED.file_hash,
+        processing_status = 'pending',
+        updated_at = NOW()
+    `;
+
+    const ext = path.extname(filename).substring(1).toLowerCase();
+    await db.query(sourceQuery, [
+      sourceId,
+      filename,
+      filePath,
+      fileSize,
+      fileHash,
+      '1.0',
+      ext,
+      'pending'
+    ]);
   }
 
   /**

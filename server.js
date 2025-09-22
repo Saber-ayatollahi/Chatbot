@@ -69,7 +69,7 @@ async function startServer() {
 
     // Initialize RAG analytics routes
     console.log('📊 Initializing RAG analytics routes...');
-    await initializeRAGAnalyticsRoutes();
+    await initializeRAGAnalyticsRoutes(database);
     console.log('✅ RAG Analytics routes initialized successfully');
 
     // Mount simple admin routes

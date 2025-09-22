@@ -474,10 +474,13 @@ class RetrievalEngine {
     try {
       // Step 1: Parallel retrieval using multiple strategies
       const maxResults = options.maxResults || options.topK || 10;
+      // CRITICAL FIX: Always retrieve at least 10 chunks internally to ensure we don't lose important content
+      const internalTopK = Math.max(10, maxResults * 3); // At least 10, or triple the requested amount
+      const subStrategyTopK = internalTopK;
       const [vectorResults, hybridResults, contextualResults] = await Promise.all([
-        this.vectorOnlyRetrieval(query, context, { ...options, topK: Math.ceil(maxResults / 2) }),
-        this.hybridRetrieval(query, context, { ...options, topK: Math.ceil(maxResults / 2) }),
-        this.contextualRetrieval(query, context, { ...options, topK: Math.ceil(maxResults / 3) })
+        this.vectorOnlyRetrieval(query, context, { ...options, topK: subStrategyTopK }),
+        this.hybridRetrieval(query, context, { ...options, topK: subStrategyTopK }),
+        this.contextualRetrieval(query, context, { ...options, topK: Math.ceil(subStrategyTopK / 2) })
       ]);
       
       // Step 2: Combine all results
@@ -561,8 +564,11 @@ class RetrievalEngine {
       
     } catch (error) {
       logger.error('❌ Advanced multi-feature retrieval failed:', error);
+      console.error('🚨 CRITICAL ERROR in advanced multi-feature retrieval:', error.message);
+      console.error('🚨 ERROR STACK:', error.stack);
       // Fallback to hybrid retrieval
       logger.warn('⚠️ Falling back to hybrid retrieval');
+      console.warn('⚠️ FALLBACK: Using basic hybrid retrieval instead of advanced multi-feature');
       return await this.hybridRetrieval(query, context, options);
     }
   }

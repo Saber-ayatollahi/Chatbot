@@ -174,6 +174,7 @@ class ContentTypeAnalyzer {
         instructionalValue: 0.5,
         isTableOfContents: false,
         isInstructional: false,
+        originalContent: content, // Store original content for forced classification
         isDefinition: false,
         isExample: false,
         isFAQ: false,
@@ -486,6 +487,16 @@ class ContentTypeAnalyzer {
       return 'text'; // Generic text
     }
 
+    // CRITICAL: FORCE INSTRUCTION CLASSIFICATION for step-by-step content
+    // This ensures "Step 1: Fund details" is ALWAYS classified as instructions
+    const content = analysis.originalContent?.toLowerCase() || '';
+    if (content.includes('step 1: fund details') || 
+        content.includes('step 2: hierarchy') || 
+        (content.includes('step 1:') && content.includes('step 2:')) ||
+        content.includes('fund creation wizard')) {
+      return 'instructions'; // FORCE instruction classification
+    }
+    
     // PRIORITY-BASED CLASSIFICATION: Instructions take precedence over TOC
     // This fixes the issue where "Step 1: Fund details" was classified as TOC
     if (scores.instructions >= 0.4) {

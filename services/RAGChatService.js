@@ -125,7 +125,7 @@ class RAGChatService {
         message: error.message,
         stack: error.stack?.substring(0, 500)
       });
-      
+
       // In test environment or development without database, continue without database
       if (process.env.NODE_ENV === 'test' || process.env.NODE_ENV === 'development') {
         this.db = null;
@@ -134,6 +134,43 @@ class RAGChatService {
         throw error;
       }
     }
+  }
+
+  /**
+   * Compute the effective service configuration for a request
+   * @param {Object} overrides - Optional overrides from request options
+   * @returns {Object} Service configuration merged with runtime overrides
+   */
+  getEffectiveServiceConfig(overrides = {}) {
+    const currentConfig = {
+      ...this.serviceConfig,
+      confidenceThreshold: this.config.get('rag.response.confidenceThreshold') || this.serviceConfig.confidenceThreshold,
+      maxTokens: this.config.get('rag.response.maxTokens') || this.serviceConfig.maxTokens,
+      temperature: this.config.get('rag.response.temperature') ?? this.serviceConfig.temperature,
+      enableCitationValidation: this.config.get('rag.response.enableCitationValidation') !== false
+    };
+
+    const mergedConfig = { ...currentConfig };
+
+    if (overrides && typeof overrides === 'object') {
+      if (typeof overrides.confidenceThreshold === 'number') {
+        mergedConfig.confidenceThreshold = overrides.confidenceThreshold;
+      }
+      if (typeof overrides.maxTokens === 'number') {
+        mergedConfig.maxTokens = overrides.maxTokens;
+      }
+      if (typeof overrides.temperature === 'number') {
+        mergedConfig.temperature = overrides.temperature;
+      }
+      if (typeof overrides.enableCitationValidation === 'boolean') {
+        mergedConfig.enableCitationValidation = overrides.enableCitationValidation;
+      }
+      if (typeof overrides.useKnowledgeBase === 'boolean') {
+        mergedConfig.useKnowledgeBase = overrides.useKnowledgeBase;
+      }
+    }
+
+    return mergedConfig;
   }
 
   /**
@@ -209,12 +246,14 @@ class RAGChatService {
       
       await this.initializeDatabase();
       
+      const serviceConfig = this.getEffectiveServiceConfig(options);
+
       logger.info(`🤖 Generating RAG response for session: ${sessionId}`);
       logger.info(`❓ Query: "${userQuery.substring(0, 100)}..."`);
       logger.debug(`🔧 RAG Service Options:`, {
-        useKnowledgeBase: options.useKnowledgeBase !== false,
-        maxTokens: options.maxTokens || this.serviceConfig.maxTokens,
-        temperature: options.temperature || this.serviceConfig.temperature,
+        useKnowledgeBase: options.useKnowledgeBase !== false && serviceConfig.useKnowledgeBase,
+        maxTokens: options.maxTokens || serviceConfig.maxTokens,
+        temperature: options.temperature || serviceConfig.temperature,
         sessionId: sessionId
       });
       
@@ -226,22 +265,24 @@ class RAGChatService {
       });
       
       // Determine if we should use knowledge base
-      const useKB = options.useKnowledgeBase !== false && this.serviceConfig.useKnowledgeBase;
-      
+      const useKB = options.useKnowledgeBase !== false && serviceConfig.useKnowledgeBase;
+
       let response;
       if (useKB) {
         response = await this.generateKnowledgeBasedResponse(
-          userQuery, 
-          sessionId, 
-          conversationContext, 
-          options
+          userQuery,
+          sessionId,
+          conversationContext,
+          options,
+          serviceConfig
         );
       } else {
         response = await this.generateStandardResponse(
-          userQuery, 
-          sessionId, 
-          conversationContext, 
-          options
+          userQuery,
+          sessionId,
+          conversationContext,
+          options,
+          serviceConfig
         );
       }
       
@@ -305,7 +346,7 @@ class RAGChatService {
    * @param {Object} options - Options
    * @returns {Object} Knowledge-based response
    */
-  async generateKnowledgeBasedResponse(userQuery, sessionId, conversationContext, options) {
+  async generateKnowledgeBasedResponse(userQuery, sessionId, conversationContext, options, serviceConfig) {
     logger.info('🔍 Generating knowledge-based response');
     logger.debug('🔍 Knowledge-based response parameters:', {
       query: userQuery.substring(0, 200),
@@ -453,7 +494,7 @@ class RAGChatService {
     
     // Step 3: Check retrieval confidence
     const retrievalConfidence = retrievalResult.metadata.confidenceScore;
-    if (retrievalConfidence < this.serviceConfig.confidenceThreshold) {
+    if (retrievalConfidence < serviceConfig.confidenceThreshold) {
       logger.warn(`⚠️ Low retrieval confidence: ${retrievalConfidence.toFixed(3)}`);
       
       if (options.fallbackOnLowConfidence !== false) {
@@ -487,7 +528,11 @@ class RAGChatService {
     
     // Step 4: Generate response with GPT-4
     const generationStartTime = Date.now();
-    const gptResponse = await this.callOpenAIChat(promptResult?.prompt || { system: '', user: userQuery }, options);
+    const gptResponse = await this.callOpenAIChat(
+      promptResult?.prompt || { system: '', user: userQuery },
+      options,
+      serviceConfig
+    );
     const generationTime = Date.now() - generationStartTime;
     
     logger.info(`🤖 GPT-4 response generated in ${generationTime}ms`);
@@ -574,7 +619,7 @@ class RAGChatService {
         model: gptResponse.model,
         tokensUsed: gptResponse.usage,
         generationTime: generationTime,
-        temperature: this.serviceConfig.temperature
+        temperature: serviceConfig.temperature
       },
       
       // Citation metadata
@@ -589,7 +634,7 @@ class RAGChatService {
       qualityIndicators: {
         hasRelevantSources: retrievalResult.chunks.length > 0,
         citationsPresent: extractedCitations.validCitations.length > 0,
-        confidenceAboveThreshold: validConfidence >= this.serviceConfig.confidenceThreshold,
+        confidenceAboveThreshold: validConfidence >= serviceConfig.confidenceThreshold,
         responseComplete: gptResponse.finishReason === 'stop'
       }
     };
@@ -615,7 +660,7 @@ class RAGChatService {
    * @param {Object} options - Options
    * @returns {Object} Standard response
    */
-  async generateStandardResponse(userQuery, sessionId, conversationContext, options) {
+  async generateStandardResponse(userQuery, sessionId, conversationContext, options, serviceConfig) {
     logger.info('💬 Generating standard response (no knowledge base)');
     
     // Prepare conversation messages
@@ -639,7 +684,7 @@ class RAGChatService {
     });
     
     // Generate response
-    const gptResponse = await this.callOpenAIChat({ combined: messages }, options);
+    const gptResponse = await this.callOpenAIChat({ combined: messages }, options, serviceConfig);
     
     return {
       message: gptResponse.content,
@@ -651,12 +696,12 @@ class RAGChatService {
       generationMetadata: {
         model: gptResponse.model,
         tokensUsed: gptResponse.usage,
-        temperature: this.serviceConfig.temperature
+        temperature: serviceConfig.temperature
       },
       qualityIndicators: {
         hasRelevantSources: false,
         citationsPresent: false,
-        confidenceAboveThreshold: true,
+        confidenceAboveThreshold: 0.7 >= serviceConfig.confidenceThreshold,
         responseComplete: gptResponse.finishReason === 'stop'
       }
     };
@@ -668,17 +713,21 @@ class RAGChatService {
    * @param {Object} options - API options
    * @returns {Object} API response
    */
-  async callOpenAIChat(prompt, options = {}) {
+  async callOpenAIChat(prompt, options = {}, serviceConfigOverride = null) {
     const messages = Array.isArray(prompt.combined) ? prompt.combined : [
       { role: 'system', content: prompt.system },
       { role: 'user', content: prompt.user }
     ];
-    
+
+    const effectiveConfig = serviceConfigOverride
+      ? { ...this.serviceConfig, ...serviceConfigOverride }
+      : this.getEffectiveServiceConfig(options);
+
     const apiOptions = {
       model: options.model || this.config.get('openai.chatModel') || 'gpt-4o',
       messages: messages,
-      max_tokens: options.maxTokens || this.serviceConfig.maxTokens,
-      temperature: options.temperature || this.serviceConfig.temperature,
+      max_tokens: options.maxTokens || effectiveConfig.maxTokens,
+      temperature: options.temperature || effectiveConfig.temperature,
       top_p: options.topP || this.config.get('openai.topP') || 1.0,
       frequency_penalty: options.frequencyPenalty || this.config.get('openai.frequencyPenalty') || 0.0,
       presence_penalty: options.presencePenalty || this.config.get('openai.presencePenalty') || 0.0
@@ -1498,7 +1547,7 @@ Always maintain a professional tone and provide practical, actionable guidance. 
           averageLength: parseFloat(conversationStats.rows[0].avg_messages_per_conversation) || 0,
           active: parseInt(conversationStats.rows[0].active_conversations)
         },
-        serviceConfig: this.serviceConfig,
+        serviceConfig: this.getEffectiveServiceConfig(),
         timestamp: new Date().toISOString()
       };
     } catch (error) {

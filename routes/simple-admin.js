@@ -6,7 +6,15 @@
 const express = require('express');
 const { body, validationResult } = require('express-validator');
 const logger = require('../utils/logger');
+const { getConfig } = require('../config/environment');
 const router = express.Router();
+
+const normalizeBoolean = (value) => {
+  if (typeof value === 'string') {
+    return value.toLowerCase() === 'true';
+  }
+  return Boolean(value);
+};
 
 // Simple test endpoint
 router.get('/test', (req, res) => {
@@ -16,27 +24,29 @@ router.get('/test', (req, res) => {
 // RAG configuration endpoints
 router.get('/rag/config', async (req, res) => {
   try {
-    const { getConfig } = require('../config/environment');
-    const config = getConfig();
-    
+    const configManager = getConfig();
+    const configuredMaxChunks = configManager.get('rag.retrieval.maxChunks');
+
     const ragConfig = {
-      confidenceThreshold: config.rag.response.confidenceThreshold,
-      responseMaxTokens: config.rag.response.maxTokens,
-      responseTemperature: config.rag.response.temperature,
-      enableCitationValidation: config.rag.response.enableCitationValidation,
-      retrievalMaxChunks: config.rag.retrieval.maxChunks,
-      diversityThreshold: config.rag.retrieval.diversityThreshold,
-      enableHybridSearch: config.rag.retrieval.enableHybridSearch,
+      confidenceThreshold: configManager.get('rag.response.confidenceThreshold'),
+      responseMaxTokens: configManager.get('rag.response.maxTokens'),
+      responseTemperature: configManager.get('rag.response.temperature'),
+      enableCitationValidation: configManager.get('rag.response.enableCitationValidation'),
+      retrievalMaxChunks: configuredMaxChunks !== undefined
+        ? configuredMaxChunks
+        : configManager.get('vector.maxRetrievedChunks'),
+      diversityThreshold: configManager.get('rag.retrieval.diversityThreshold'),
+      enableHybridSearch: configManager.get('rag.retrieval.enableHybridSearch'),
     };
 
     res.json({ success: true, config: ragConfig });
 
   } catch (error) {
     logger.error('Failed to get RAG config:', error);
-    res.status(500).json({ 
-      success: false, 
+    res.status(500).json({
+      success: false,
       error: 'Failed to get RAG configuration',
-      details: error.message 
+      details: error.message
     });
   }
 });
@@ -55,41 +65,55 @@ router.put('/rag/config',
     try {
       const errors = validationResult(req);
       if (!errors.isEmpty()) {
-        return res.status(400).json({ 
-          success: false, 
-          errors: errors.array() 
+        return res.status(400).json({
+          success: false,
+          errors: errors.array()
         });
       }
 
-      // Update environment variables dynamically
+      const configManager = getConfig();
       const updates = {};
+
       if (req.body.confidenceThreshold !== undefined) {
-        process.env.CONFIDENCE_THRESHOLD = req.body.confidenceThreshold.toString();
-        updates.CONFIDENCE_THRESHOLD = req.body.confidenceThreshold;
+        const thresholdValue = Number(req.body.confidenceThreshold);
+        configManager.set('rag.response.confidenceThreshold', thresholdValue);
+        configManager.set('rag.confidence.minimumThreshold', thresholdValue);
+        updates.confidenceThreshold = thresholdValue;
       }
+
       if (req.body.responseMaxTokens !== undefined) {
-        process.env.RESPONSE_MAX_TOKENS = req.body.responseMaxTokens.toString();
-        updates.RESPONSE_MAX_TOKENS = req.body.responseMaxTokens;
+        configManager.set('rag.response.maxTokens', Number(req.body.responseMaxTokens));
+        updates.responseMaxTokens = Number(req.body.responseMaxTokens);
       }
+
       if (req.body.responseTemperature !== undefined) {
-        process.env.RESPONSE_TEMPERATURE = req.body.responseTemperature.toString();
-        updates.RESPONSE_TEMPERATURE = req.body.responseTemperature;
+        configManager.set('rag.response.temperature', Number(req.body.responseTemperature));
+        updates.responseTemperature = Number(req.body.responseTemperature);
       }
+
       if (req.body.enableCitationValidation !== undefined) {
-        process.env.ENABLE_CITATION_VALIDATION = req.body.enableCitationValidation.toString();
-        updates.ENABLE_CITATION_VALIDATION = req.body.enableCitationValidation;
+        const value = normalizeBoolean(req.body.enableCitationValidation);
+        configManager.set('rag.response.enableCitationValidation', value);
+        updates.enableCitationValidation = value;
       }
+
       if (req.body.retrievalMaxChunks !== undefined) {
-        process.env.RETRIEVAL_MAX_CHUNKS = req.body.retrievalMaxChunks.toString();
-        updates.RETRIEVAL_MAX_CHUNKS = req.body.retrievalMaxChunks;
+        const maxChunks = Number(req.body.retrievalMaxChunks);
+        configManager.set('rag.retrieval.maxChunks', maxChunks);
+        configManager.set('vector.maxRetrievedChunks', maxChunks);
+        updates.retrievalMaxChunks = maxChunks;
       }
+
       if (req.body.diversityThreshold !== undefined) {
-        process.env.RETRIEVAL_DIVERSITY_THRESHOLD = req.body.diversityThreshold.toString();
-        updates.RETRIEVAL_DIVERSITY_THRESHOLD = req.body.diversityThreshold;
+        const diversityThreshold = Number(req.body.diversityThreshold);
+        configManager.set('rag.retrieval.diversityThreshold', diversityThreshold);
+        updates.diversityThreshold = diversityThreshold;
       }
+
       if (req.body.enableHybridSearch !== undefined) {
-        process.env.ENABLE_HYBRID_SEARCH = req.body.enableHybridSearch.toString();
-        updates.ENABLE_HYBRID_SEARCH = req.body.enableHybridSearch;
+        const value = normalizeBoolean(req.body.enableHybridSearch);
+        configManager.set('rag.retrieval.enableHybridSearch', value);
+        updates.enableHybridSearch = value;
       }
 
       logger.info('RAG configuration updated', {

@@ -14,12 +14,7 @@ class ConfidenceManager {
     this.db = null;
     
     // Confidence thresholds
-    this.thresholds = {
-      high: this.config.get('rag.confidence.highThreshold') || 0.8,
-      medium: this.config.get('rag.confidence.mediumThreshold') || 0.6,
-      low: this.config.get('rag.confidence.lowThreshold') || 0.4,
-      minimum: this.config.get('rag.confidence.minimumThreshold') || 0.2
-    };
+    this.thresholds = this.buildThresholdsFromConfig();
     
     // Confidence factors and weights
     this.confidenceFactors = {
@@ -96,6 +91,51 @@ class ConfidenceManager {
   }
 
   /**
+   * Build confidence thresholds using runtime configuration and overrides
+   * @param {Object} overrides - Optional overrides for thresholds
+   * @returns {Object} Threshold configuration
+   */
+  buildThresholdsFromConfig(overrides = {}) {
+    const configThresholds = {
+      high: this.config.get('rag.confidence.highThreshold'),
+      medium: this.config.get('rag.confidence.mediumThreshold'),
+      low: this.config.get('rag.confidence.lowThreshold'),
+      minimum: this.config.get('rag.confidence.minimumThreshold')
+    };
+
+    const responseThreshold = this.config.get('rag.response.confidenceThreshold');
+    const defaults = { high: 0.8, medium: 0.6, low: 0.4, minimum: 0.2 };
+    const isValidNumber = (value) => typeof value === 'number' && !Number.isNaN(value);
+
+    return {
+      high: isValidNumber(overrides.high)
+        ? overrides.high
+        : (isValidNumber(configThresholds.high) ? configThresholds.high : defaults.high),
+      medium: isValidNumber(overrides.medium)
+        ? overrides.medium
+        : (isValidNumber(configThresholds.medium) ? configThresholds.medium : defaults.medium),
+      low: isValidNumber(overrides.low)
+        ? overrides.low
+        : (isValidNumber(configThresholds.low) ? configThresholds.low : defaults.low),
+      minimum: isValidNumber(overrides.minimum)
+        ? overrides.minimum
+        : (isValidNumber(configThresholds.minimum)
+          ? configThresholds.minimum
+          : (isValidNumber(responseThreshold) ? responseThreshold : defaults.minimum))
+    };
+  }
+
+  /**
+   * Refresh cached thresholds from configuration
+   * @param {Object} overrides - Optional overrides for thresholds
+   * @returns {Object} Updated thresholds
+   */
+  refreshThresholds(overrides = {}) {
+    this.thresholds = this.buildThresholdsFromConfig(overrides);
+    return this.thresholds;
+  }
+
+  /**
    * Calculate comprehensive confidence score
    * @param {Object} retrievalData - Retrieval results and metadata
    * @param {Object} contentData - Content analysis data
@@ -105,8 +145,9 @@ class ConfidenceManager {
    */
   async calculateConfidence(retrievalData, contentData, contextData, generationData) {
     try {
+      this.refreshThresholds();
       logger.info('🎯 Calculating comprehensive confidence score');
-      
+
       const startTime = performance.now();
       
       // Calculate individual confidence components

@@ -40,10 +40,15 @@ class TestUtils {
       ...overrides
     };
   }
-  
+
+  static delay(duration) {
+    const delayMs = typeof duration === 'number' && duration >= 0 ? duration : 0;
+    return new Promise(resolve => setTimeout(resolve, delayMs));
+  }
+
   static async waitFor(condition, timeout = 5000, interval = 100) {
     const start = Date.now();
-    
+
     while (Date.now() - start < timeout) {
       if (await condition()) {
         return true;

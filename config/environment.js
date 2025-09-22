@@ -8,6 +8,18 @@ require('dotenv').config();
 const path = require('path');
 const fs = require('fs');
 
+function buildDatabaseUrl({ host, port, name, user, password }) {
+  const encode = (value) => encodeURIComponent(value ?? '');
+  const encodedUser = encode(user);
+  const encodedPassword = encode(password);
+  const encodedDatabase = encode(name);
+  const credentials = (encodedUser || encodedPassword)
+    ? `${encodedUser}${encodedPassword ? `:${encodedPassword}` : ''}@`
+    : '';
+
+  return `postgresql://${credentials}${host}:${port}/${encodedDatabase}`;
+}
+
 class EnvironmentConfig {
   constructor() {
     this.config = {};
@@ -66,7 +78,7 @@ class EnvironmentConfig {
     
     // Add database URL for services that expect it
     const { host, port, name, user, password } = this.config.database;
-    this.config.database.url = `postgresql://${user}:${password}@${host}:${port}/${name}`;
+    this.config.database.url = buildDatabaseUrl({ host, port, name, user, password });
 
     // OpenAI Configuration
     this.config.openai = {
@@ -394,13 +406,18 @@ class EnvironmentConfig {
       schedule: process.env.BACKUP_SCHEDULE || '0 2 * * *',
       retentionDays: parseInt(process.env.BACKUP_RETENTION_DAYS) || 30,
       location: process.env.BACKUP_LOCATION || './backups',
-      
+
       export: {
         enableDataExport: process.env.ENABLE_DATA_EXPORT !== 'false',
         format: process.env.EXPORT_FORMAT || 'json',
         maxSize: this.parseSize(process.env.MAX_EXPORT_SIZE) || 100 * 1024 * 1024 // 100MB
       }
     };
+
+    // Mirror top-level configuration keys on the instance for backward compatibility
+    Object.keys(this.config).forEach(key => {
+      this[key] = this.config[key];
+    });
   }
 
   /**
@@ -577,6 +594,36 @@ class EnvironmentConfig {
   }
 
   /**
+   * Update configuration value by path (e.g., 'rag.response.confidenceThreshold')
+   */
+  set(path, value) {
+    if (typeof path !== 'string' || path.trim() === '') {
+      throw new Error('Configuration path must be a non-empty string');
+    }
+
+    const keys = path.split('.');
+    let current = this.config;
+
+    for (let i = 0; i < keys.length - 1; i++) {
+      const key = keys[i];
+      if (!current[key] || typeof current[key] !== 'object') {
+        current[key] = {};
+      }
+      current = current[key];
+    }
+
+    current[keys[keys.length - 1]] = value;
+
+    // Ensure top-level references stay in sync for direct access patterns
+    const topLevelKey = keys[0];
+    if (topLevelKey) {
+      this[topLevelKey] = this.config[topLevelKey];
+    }
+
+    return value;
+  }
+
+  /**
    * Check if we're in development mode
    */
   isDevelopment() {
@@ -602,7 +649,7 @@ class EnvironmentConfig {
    */
   getDatabaseURL() {
     const { host, port, name, user, password } = this.config.database;
-    return `postgresql://${user}:${password}@${host}:${port}/${name}`;
+    return buildDatabaseUrl({ host, port, name, user, password });
   }
 
   /**
@@ -684,6 +731,14 @@ function getConfig() {
               'openai.apiKey': 'test-key-12345-development',
               'openai.chatModel': 'gpt-4',
               'openai.embeddingModel': 'text-embedding-3-large',
+              'logging.level': 'debug',
+              'logging.logFilePath': './logs/test-app.log',
+              'logging.maxSize': '10m',
+              'logging.maxFiles': 3,
+              'app.environment': 'test',
+              'app.name': 'Fund Management Chatbot',
+              'app.version': '1.0.0',
+              'vector.dimension': 1536,
             };
             return testConfig[path];
           },
@@ -704,6 +759,20 @@ function getConfig() {
             apiKey: 'test-key-12345-development',
             chatModel: 'gpt-4',
             embeddingModel: 'text-embedding-3-large',
+          },
+          logging: {
+            level: 'debug',
+            logFilePath: './logs/test-app.log',
+            maxSize: '10m',
+            maxFiles: 3,
+          },
+          app: {
+            environment: 'test',
+            name: 'Fund Management Chatbot',
+            version: '1.0.0',
+          },
+          vector: {
+            dimension: 1536,
           },
           compliance: {
             enablePiiRedaction: true,
